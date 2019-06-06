@@ -1,5 +1,5 @@
 import mxnet as mx
-from . import proposal_target
+from . import proposal_target, mask_output
 
 eps=2e-5
 use_global_stats=True
@@ -58,10 +58,7 @@ def get_resnet_top_feature(data, units, filter_list):
     unit = residual_unit(data=data, num_filter=filter_list[3], stride=(2, 2), dim_match=False, name='stage4_unit1')
     for i in range(2, units[3] + 1):
         unit = residual_unit(data=unit, num_filter=filter_list[3], stride=(1, 1), dim_match=True, name='stage4_unit%s' % i)
-    bn1 = mx.sym.BatchNorm(data=unit, fix_gamma=False, eps=eps, use_global_stats=use_global_stats, name='bn1')
-    relu1 = mx.sym.Activation(data=bn1, act_type='relu', name='relu1')
-    pool1 = mx.symbol.Pooling(data=relu1, global_pool=True, kernel=(7, 7), pool_type='avg', name='pool1')
-    return pool1
+    return unit
 
 
 def get_resnet_train(anchor_scales, anchor_ratios, rpn_feature_stride,
@@ -74,9 +71,11 @@ def get_resnet_train(anchor_scales, anchor_ratios, rpn_feature_stride,
     data = mx.symbol.Variable(name="data")
     im_info = mx.symbol.Variable(name="im_info")
     gt_boxes = mx.symbol.Variable(name="gt_boxes")
+    seg = mx.symbol.Variable(name="seg")
     rpn_label = mx.symbol.Variable(name='label')
     rpn_bbox_target = mx.symbol.Variable(name='bbox_target')
     rpn_bbox_weight = mx.symbol.Variable(name='bbox_weight')
+    
 
     # shared convolutional layers
     conv_feat = get_resnet_feature(data, units=units, filter_list=filter_list)
@@ -112,7 +111,7 @@ def get_resnet_train(anchor_scales, anchor_ratios, rpn_feature_stride,
         threshold=rpn_nms_thresh, rpn_min_size=rpn_min_size)
 
     # rcnn roi proposal target
-    group = mx.symbol.Custom(rois=rois, gt_boxes=gt_boxes, op_type='proposal_target',
+    group = mx.symbol.Custom(rois=rois, gt_boxes=gt_boxes, seg=seg, op_type='proposal_target',
                              num_classes=num_classes, batch_images=rcnn_batch_size,
                              batch_rois=rcnn_batch_rois, fg_fraction=rcnn_fg_fraction,
                              fg_overlap=rcnn_fg_overlap, box_stds=rcnn_bbox_stds)
@@ -120,6 +119,8 @@ def get_resnet_train(anchor_scales, anchor_ratios, rpn_feature_stride,
     label = group[1]
     bbox_target = group[2]
     bbox_weight = group[3]
+    mask_target = group[4]
+    mask_weight = group[5]
 
     # rcnn roi pool
     roi_pool = mx.symbol.ROIPooling(
@@ -128,8 +129,21 @@ def get_resnet_train(anchor_scales, anchor_ratios, rpn_feature_stride,
     # rcnn top feature
     top_feat = get_resnet_top_feature(roi_pool, units=units, filter_list=filter_list)
 
+    
+    mask_deconv1 = mx.symbol.Deconvolution(data=top_feat, kernel=(4, 4), stride=(2, 2), num_filter=256,
+                                            pad=(1, 1), name="mask_deconv1")
+    mask_conv2 = mx.symbol.Convolution(data=mask_deconv1, kernel=(1, 1), num_filter=num_classes,
+                                          name="mask_conv2")
+    mask_prob = mx.symbol.Activation(data=mask_conv2, act_type='sigmoid', name="mask_prob")
+    mask_output = mx.symbol.Custom(mask_prob=mask_prob, mask_target=mask_target, mask_weight=mask_weight,
+                                   label=label, name="mask_output", op_type='MaskOutput')
+
+    bn1 = mx.sym.BatchNorm(data=top_feat, fix_gamma=False, eps=eps, use_global_stats=use_global_stats, name='bn1')
+    relu1 = mx.sym.Activation(data=bn1, act_type='relu', name='relu1')
+    pool1 = mx.symbol.Pooling(data=relu1, global_pool=True, kernel=(7, 7), pool_type='avg', name='pool1')
+
     # rcnn classification
-    cls_score = mx.symbol.FullyConnected(name='cls_score', data=top_feat, num_hidden=num_classes)
+    cls_score = mx.symbol.FullyConnected(name='cls_score', data=pool1, num_hidden=num_classes)
     cls_prob = mx.symbol.SoftmaxOutput(name='cls_prob', data=cls_score, label=label, normalization='batch')
 
     # rcnn bbox regression
@@ -143,7 +157,7 @@ def get_resnet_train(anchor_scales, anchor_ratios, rpn_feature_stride,
     bbox_loss = mx.symbol.Reshape(data=bbox_loss, shape=(rcnn_batch_size, -1, 4 * num_classes), name='bbox_loss_reshape')
 
     # group output
-    group = mx.symbol.Group([rpn_cls_prob, rpn_bbox_loss, cls_prob, bbox_loss, mx.symbol.BlockGrad(label)])
+    group = mx.symbol.Group([rpn_cls_prob, rpn_bbox_loss, cls_prob, bbox_loss, mx.symbol.BlockGrad(label), mask_output, mask_target, mask_weight])
     return group
 
 
@@ -192,8 +206,12 @@ def get_resnet_test(anchor_scales, anchor_ratios, rpn_feature_stride,
     # rcnn top feature
     top_feat = get_resnet_top_feature(roi_pool, units=units, filter_list=filter_list)
 
+    bn1 = mx.sym.BatchNorm(data=top_feat, fix_gamma=False, eps=eps, use_global_stats=use_global_stats, name='bn1')
+    relu1 = mx.sym.Activation(data=bn1, act_type='relu', name='relu1')
+    pool1 = mx.symbol.Pooling(data=relu1, global_pool=True, kernel=(7, 7), pool_type='avg', name='pool1')
+
     # rcnn classification
-    cls_score = mx.symbol.FullyConnected(name='cls_score', data=top_feat, num_hidden=num_classes)
+    cls_score = mx.symbol.FullyConnected(name='cls_score', data=pool1, num_hidden=num_classes)
     cls_prob = mx.symbol.softmax(name='cls_prob', data=cls_score)
 
     # rcnn bbox regression

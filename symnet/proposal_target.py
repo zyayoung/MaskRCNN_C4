@@ -4,11 +4,66 @@ Proposal Target Operator selects foreground and background roi and assigns label
 
 import mxnet as mx
 import numpy as np
+import cv2
+import PIL.Image as Image
+import math
 
 from symdata.bbox import bbox_overlaps, bbox_transform
 
+def compute_mask_and_label(ex_rois, ex_labels, seg, flipped=False):
+    # assert os.path.exists(seg_gt), 'Path does not exist: {}'.format(seg_gt)
+    # im = Image.open(seg_gt)
+    # pixel = list(im.getdata())
+    # pixel = np.array(pixel).reshape([im.size[1], im.size[0]])
+    ins_seg = seg[0]
+    if flipped:
+        ins_seg = ins_seg[:, ::-1]
+    rois = ex_rois[:,1:]
+    n_rois = ex_rois.shape[0]
+    label = ex_labels
+    class_id = [0, 24, 25, 26, 27, 28, 31, 32, 33]
+    mask_target = np.zeros((n_rois, 14, 14), dtype=np.int8)
+    mask_label = np.zeros((n_rois), dtype=np.int8)
+    # print(rois.shape)
+    for n in range(n_rois):
+        target = ins_seg[int(rois[n, 1]): int(rois[n, 3]), int(rois[n, 0]): int(rois[n, 2])]
+        ids = np.unique(target)
+        ins_id = 0
+        max_count = 0
+        for id in ids:
+            if math.floor(id / 1000) == class_id[int(label[int(n)])]:
+                px = np.where(ins_seg == int(id))
+                x_min = np.min(px[1])
+                y_min = np.min(px[0])
+                x_max = np.max(px[1])
+                y_max = np.max(px[0])
+                x1 = max(rois[n, 0], x_min)
+                y1 = max(rois[n, 1], y_min)
+                x2 = min(rois[n, 2], x_max)
+                y2 = min(rois[n, 3], y_max)
+                iou = (x2 - x1) * (y2 - y1)
+                iou = iou / ((rois[n, 2] - rois[n, 0]) * (rois[n, 3] - rois[n, 1])
+                             + (x_max - x_min) * (y_max - y_min) - iou)
+                             
+                # print(math.floor(id / 1000), x_min, y_min, x_max, y_max, iou)
+                if iou > max_count:
+                    ins_id = id
+                    max_count = iou
 
-def sample_rois(rois, gt_boxes, num_classes, rois_per_image, fg_rois_per_image, fg_overlap, box_stds):
+        if max_count == 0:
+            continue
+        # print max_count
+        mask = np.zeros(target.shape)
+        idx = np.where(target == ins_id)
+        mask[idx] = 1
+        mask = cv2.resize(mask, (14, 14), interpolation=cv2.INTER_NEAREST)
+
+        mask_target[n] = mask
+        mask_label[n] = label[int(n)]
+    return mask_target, mask_label
+
+
+def sample_rois(rois, gt_boxes, num_classes, rois_per_image, fg_rois_per_image, fg_overlap, box_stds, seg):
     """
     generate random sample of ROIs comprising foreground and background examples
     :param rois: [n, 5] (batch_index, x1, y1, x2, y2)
@@ -56,6 +111,15 @@ def sample_rois(rois, gt_boxes, num_classes, rois_per_image, fg_rois_per_image, 
     # set labels of bg rois to be 0
     labels[fg_rois_this_image:] = 0
 
+    mask_targets = np.zeros((rois_per_image, num_classes, 14, 14), dtype=np.int8)
+    mask_weights = np.zeros((rois_per_image, num_classes, 1, 1), dtype=np.int8)
+
+    _mask_targets, _mask_labels = compute_mask_and_label(rois[:fg_rois_this_image], labels[:fg_rois_this_image], seg)
+    mask_targets[:fg_rois_this_image, _mask_labels] = _mask_targets
+    mask_weights[:fg_rois_this_image] = 1
+
+    # print(_mask_labels)
+
     # load or compute bbox_target
     targets = bbox_transform(rois[:, 1:], gt_boxes[gt_assignment[keep_indexes], :4], box_stds=box_stds)
     bbox_targets = np.zeros((rois_per_image, 4 * num_classes), dtype=np.float32)
@@ -65,7 +129,7 @@ def sample_rois(rois, gt_boxes, num_classes, rois_per_image, fg_rois_per_image, 
         bbox_targets[i, cls_ind * 4:(cls_ind + 1) * 4] = targets[i]
         bbox_weights[i, cls_ind * 4:(cls_ind + 1) * 4] = 1
 
-    return rois, labels, bbox_targets, bbox_weights
+    return rois, labels, bbox_targets, bbox_weights, mask_targets, mask_weights
 
 
 class ProposalTargetOperator(mx.operator.CustomOp):
@@ -84,11 +148,14 @@ class ProposalTargetOperator(mx.operator.CustomOp):
 
         all_rois = in_data[0].asnumpy()
         all_gt_boxes = in_data[1].asnumpy()
+        all_segs = in_data[2].asnumpy()
 
         rois = np.empty((0, 5), dtype=np.float32)
         labels = np.empty((0, ), dtype=np.float32)
         bbox_targets = np.empty((0, 4 * self._num_classes), dtype=np.float32)
         bbox_weights = np.empty((0, 4 * self._num_classes), dtype=np.float32)
+        mask_targets = np.empty((0, self._num_classes, 14, 14), dtype=np.int8)
+        mask_weights = np.empty((0, self._num_classes, 1, 1), dtype=np.int8)
         for batch_idx in range(self._batch_images):
             b_rois = all_rois[np.where(all_rois[:, 0] == batch_idx)[0]]
             b_gt_boxes = all_gt_boxes[batch_idx]
@@ -98,23 +165,28 @@ class ProposalTargetOperator(mx.operator.CustomOp):
             batch_pad = batch_idx * np.ones((b_gt_boxes.shape[0], 1), dtype=b_gt_boxes.dtype)
             b_rois = np.vstack((b_rois, np.hstack((batch_pad, b_gt_boxes[:, :-1]))))
 
-            b_rois, b_labels, b_bbox_targets, b_bbox_weights = \
+            b_rois, b_labels, b_bbox_targets, b_bbox_weights, b_mask_targets, b_mask_weights = \
                 sample_rois(b_rois, b_gt_boxes, num_classes=self._num_classes, rois_per_image=self._rois_per_image,
-                            fg_rois_per_image=self._fg_rois_per_image, fg_overlap=self._fg_overlap, box_stds=self._box_stds)
+                            fg_rois_per_image=self._fg_rois_per_image, fg_overlap=self._fg_overlap, box_stds=self._box_stds, seg=all_segs)
 
             rois = np.vstack((rois, b_rois))
             labels = np.hstack((labels, b_labels))
             bbox_targets = np.vstack((bbox_targets, b_bbox_targets))
             bbox_weights = np.vstack((bbox_weights, b_bbox_weights))
+            mask_targets = np.vstack((mask_targets, b_mask_targets))
+            mask_weights = np.vstack((mask_weights, b_mask_weights))
 
         self.assign(out_data[0], req[0], rois)
         self.assign(out_data[1], req[1], labels)
         self.assign(out_data[2], req[2], bbox_targets)
         self.assign(out_data[3], req[3], bbox_weights)
+        self.assign(out_data[4], req[4], mask_targets)
+        self.assign(out_data[5], req[5], mask_weights)
 
     def backward(self, req, out_grad, in_data, out_data, in_grad, aux):
         self.assign(in_grad[0], req[0], 0)
         self.assign(in_grad[1], req[1], 0)
+        self.assign(in_grad[2], req[2], 0)
 
 
 @mx.operator.register('proposal_target')
@@ -130,10 +202,10 @@ class ProposalTargetProp(mx.operator.CustomOpProp):
         self._box_stds = tuple(np.fromstring(box_stds[1:-1], dtype=float, sep=','))
 
     def list_arguments(self):
-        return ['rois', 'gt_boxes']
+        return ['rois', 'gt_boxes', 'seg']
 
     def list_outputs(self):
-        return ['rois_output', 'label', 'bbox_target', 'bbox_weight']
+        return ['rois_output', 'label', 'bbox_target', 'bbox_weight', 'mask_targets', 'mask_weights']
 
     def infer_shape(self, in_shape):
         assert self._batch_rois % self._batch_images == 0, \
@@ -141,14 +213,17 @@ class ProposalTargetProp(mx.operator.CustomOpProp):
 
         rpn_rois_shape = in_shape[0]
         gt_boxes_shape = in_shape[1]
+        seg_shape = in_shape[2]
 
         output_rois_shape = (self._batch_rois, 5)
         label_shape = (self._batch_rois, )
         bbox_target_shape = (self._batch_rois, self._num_classes * 4)
         bbox_weight_shape = (self._batch_rois, self._num_classes * 4)
+        mask_target_shape = (self._batch_rois, self._num_classes, 14, 14)
+        mask_weight_shape = (self._batch_rois, self._num_classes, 1, 1)
 
-        return [rpn_rois_shape, gt_boxes_shape], \
-               [output_rois_shape, label_shape, bbox_target_shape, bbox_weight_shape]
+        return [rpn_rois_shape, gt_boxes_shape, seg_shape], \
+               [output_rois_shape, label_shape, bbox_target_shape, bbox_weight_shape, mask_target_shape, mask_weight_shape]
 
     def create_operator(self, ctx, shapes, dtypes):
         return ProposalTargetOperator(self._num_classes, self._batch_images, self._batch_rois, self._fg_fraction,

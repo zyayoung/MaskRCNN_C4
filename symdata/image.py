@@ -1,6 +1,8 @@
 import numpy as np
 import cv2
 
+import PIL.Image as Image
+
 
 def get_image(roi_rec, short, max_size, mean, std):
     """
@@ -28,8 +30,12 @@ def get_image(roi_rec, short, max_size, mean, std):
         gt_boxes[:, 0:4] *= im_scale
     else:
         gt_boxes = np.empty((0, 5), dtype=np.float32)
+    
+    im_seg = Image.open(roi_rec['ins_seg'])
+    pixel = list(im_seg.getdata())
+    ins_seg = np.array(pixel).reshape([im_seg.size[1], im_seg.size[0]])
 
-    return im_tensor, im_info, gt_boxes
+    return im_tensor, im_info, gt_boxes, ins_seg
 
 
 def imdecode(image_path):

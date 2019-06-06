@@ -58,6 +58,9 @@ def initialize_frcnn(symbol, data_shapes, arg_params, aux_params):
     arg_params['cls_score_bias'] = mx.nd.zeros(shape=arg_shape_dict['cls_score_bias'])
     arg_params['bbox_pred_weight'] = mx.random.normal(0, 0.001, shape=arg_shape_dict['bbox_pred_weight'])
     arg_params['bbox_pred_bias'] = mx.nd.zeros(shape=arg_shape_dict['bbox_pred_bias'])
+    arg_params['mask_deconv1_weight'] = mx.random.normal(0, 0.01, shape=arg_shape_dict['mask_deconv1_weight'])
+    arg_params['mask_conv2_weight'] = mx.random.normal(0, 0.01, shape=arg_shape_dict['mask_conv2_weight'])
+    arg_params['mask_conv2_bias'] = mx.nd.zeros(shape=arg_shape_dict['mask_conv2_bias'])
     return arg_params, aux_params
 
 

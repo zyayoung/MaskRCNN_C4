@@ -4,6 +4,9 @@ import numpy as np
 from symdata.anchor import AnchorGenerator, AnchorSampler
 from symdata.image import imdecode, resize, transform, get_image, tensor_vstack
 
+import threading as td
+import time
+from queue import Queue
 
 def load_test(filename, short, max_size, mean, std):
     # read and transform image
@@ -133,16 +136,19 @@ class AnchorLoader(mx.io.DataIter):
         self._index = np.arange(self._size)
 
         # decide data and label names
-        self._data_name = ['data', 'im_info', 'gt_boxes']
+        self._data_name = ['data', 'im_info', 'gt_boxes', 'seg']
         self._label_name = ['label', 'bbox_target', 'bbox_weight']
 
         # status variable
         self._cur = 0
         self._data = None
         self._label = None
+        
+        self.q = Queue()
+        self.work_on_next()
 
         # get first batch to fill in provide_data and provide_label
-        self.next()
+        self.next_multithread()
         self.reset()
 
     @property
@@ -157,37 +163,59 @@ class AnchorLoader(mx.io.DataIter):
         self._cur = 0
         if self._shuffle:
             np.random.shuffle(self._index)
+        self.q.queue.clear()
+        self.work_on_next()
 
     def iter_next(self):
         return self._cur + self._batch_size <= self._size
-
-    def next(self):
+    
+    def next_multithread(self):
         if self.iter_next():
+            time.sleep(0.00001)
             data_batch = mx.io.DataBatch(data=self.getdata(), label=self.getlabel(),
                                          pad=self.getpad(), index=self.getindex(),
                                          provide_data=self.provide_data, provide_label=self.provide_label)
             self._cur += self._batch_size
-            return data_batch
+            self.q.put(data_batch)
         else:
+            self.q.put('StopIteration')
+     
+    def work_on_next(self):
+        t = td.Thread(target=self.next_multithread, daemon=True)
+        t.start()
+
+
+    def next(self):
+        # t = time.clock()
+        content = self.q.get()
+        if content != 'StopIteration':
+            # print(time.clock() - t)
+            self.work_on_next()
+            return content
+        else:
+            self.q.queue.clear()
             raise StopIteration
 
     def getdata(self):
         indices = self.getindex()
-        im_tensor, im_info, gt_boxes = [], [], []
+        im_tensor, im_info, gt_boxes, seg = [], [], [], []
         for index in indices:
             roi_rec = self._roidb[index]
-            b_im_tensor, b_im_info, b_gt_boxes = get_image(roi_rec, self._short, self._max_size, self._mean, self._std)
+            b_im_tensor, b_im_info, b_gt_boxes, b_seg = get_image(roi_rec, self._short, self._max_size, self._mean, self._std)
             im_tensor.append(b_im_tensor)
             im_info.append(b_im_info)
             gt_boxes.append(b_gt_boxes)
+            seg.append(b_seg)
+            # print(b_seg)
         im_tensor = mx.nd.array(tensor_vstack(im_tensor, pad=0))
         im_info = mx.nd.array(tensor_vstack(im_info, pad=0))
         gt_boxes = mx.nd.array(tensor_vstack(gt_boxes, pad=-1))
-        self._data = im_tensor, im_info, gt_boxes
+        seg = mx.nd.array(tensor_vstack(seg, pad=0))
+        self._data = im_tensor, im_info, gt_boxes, seg
         return self._data
 
     def getlabel(self):
-        im_tensor, im_info, gt_boxes = self._data
+        im_tensor, im_info, gt_boxes, seg = self._data
 
         # all stacked image share same anchors
         _, out_shape, _ = self._feat_sym.infer_shape(data=im_tensor.shape)
