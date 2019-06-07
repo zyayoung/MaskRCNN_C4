@@ -48,7 +48,7 @@ class TestLoader(mx.io.DataIter):
         self._std = std
 
         # infer properties from roidb
-        self._size = len(self._roidb)
+        self._size = 2  # len(self._roidb)
         self._index = np.arange(self._size)
 
         # decide data and label names (only for training)
@@ -93,7 +93,7 @@ class TestLoader(mx.io.DataIter):
         im_tensor, im_info = [], []
         for index in indices:
             roi_rec = self._roidb[index]
-            b_im_tensor, b_im_info, _ = get_image(roi_rec, self._short, self._max_size, self._mean, self._std)
+            b_im_tensor, b_im_info, b_gt_boxes, b_seg = get_image(roi_rec, self._short, self._max_size, self._mean, self._std)
             im_tensor.append(b_im_tensor)
             im_info.append(b_im_info)
         im_tensor = mx.nd.array(tensor_vstack(im_tensor, pad=0))

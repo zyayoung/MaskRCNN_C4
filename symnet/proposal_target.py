@@ -16,9 +16,9 @@ def compute_mask_and_label(ex_rois, ex_labels, seg, flipped=False):
     # pixel = list(im.getdata())
     # pixel = np.array(pixel).reshape([im.size[1], im.size[0]])
     ins_seg = seg[0]
-    if flipped:
-        ins_seg = ins_seg[:, ::-1]
+    # print(ins_seg)
     rois = ex_rois[:,1:]
+    # print(rois)
     n_rois = ex_rois.shape[0]
     label = ex_labels
     class_id = [0, 24, 25, 26, 27, 28, 31, 32, 33]
@@ -116,9 +116,14 @@ def sample_rois(rois, gt_boxes, num_classes, rois_per_image, fg_rois_per_image, 
 
     _mask_targets, _mask_labels = compute_mask_and_label(rois[:fg_rois_this_image], labels[:fg_rois_this_image], seg)
     mask_targets[:fg_rois_this_image, _mask_labels] = _mask_targets
-    mask_weights[:fg_rois_this_image] = 1
+    mask_weights[:fg_rois_this_image, _mask_labels] = 1
+    # cv2.imwrite(_mask_targets[])
 
-    # print(_mask_labels)
+    roi_idx = _mask_labels.argmax()
+    sample = mask_targets[roi_idx, _mask_labels[roi_idx]]
+    print(sample.sum())
+    if sample.sum() > 0:
+        cv2.imwrite("mask.png", np.uint8(sample * 200))
 
     # load or compute bbox_target
     targets = bbox_transform(rois[:, 1:], gt_boxes[gt_assignment[keep_indexes], :4], box_stds=box_stds)

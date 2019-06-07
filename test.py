@@ -12,6 +12,9 @@ from symdata.loader import TestLoader
 from symnet.logger import logger
 from symnet.model import load_param, check_shape
 
+import os
+os.environ['MXNET_CUDNN_AUTOTUNE_DEFAULT'] = "0"
+
 
 def test_net(sym, imdb, args):
     # print config
@@ -44,7 +47,10 @@ def test_net(sym, imdb, args):
     # all detections are collected into:
     #    all_boxes[cls][image] = N x 5 array of detections in
     #    (x1, y1, x2, y2, score)
+    results_list = []
     all_boxes = [[[] for _ in range(imdb.num_images)]
+                 for _ in range(imdb.num_classes)]
+    all_masks = [[[] for _ in range(imdb.num_images)]
                  for _ in range(imdb.num_classes)]
 
     # start detection
@@ -53,29 +59,44 @@ def test_net(sym, imdb, args):
             # forward
             im_info = data_batch.data[1][0]
             mod.forward(data_batch)
-            rois, scores, bbox_deltas = mod.get_outputs()
+            rois, scores, bbox_deltas, mask_prob = mod.get_outputs()
             rois = rois[:, 1:]
             scores = scores[0]
             bbox_deltas = bbox_deltas[0]
 
-            det = im_detect(rois, scores, bbox_deltas, im_info,
+            det, masks = im_detect(rois, scores, bbox_deltas, mask_prob, im_info,
                             bbox_stds=args.rcnn_bbox_stds, nms_thresh=args.rcnn_nms_thresh,
                             conf_thresh=args.rcnn_conf_thresh)
+            # print(det.shape, masks.shape)
             for j in range(1, imdb.num_classes):
                 indexes = np.where(det[:, 0] == j)[0]
                 all_boxes[j][i] = np.concatenate((det[:, -4:], det[:, [1]]), axis=-1)[indexes, :]
+                all_masks[j][i] = masks[indexes]
+
+            boxes_this_image = [[]] + [all_boxes[cls_ind][i] for cls_ind in range(1, imdb.num_classes)]
+            masks_this_image = [[]] + [all_masks[cls_ind][i] for cls_ind in range(1, imdb.num_classes)]
+            # print(boxes_this_image[1][:4])
+            results_list.append({
+                            'image': '{}.png'.format(i),
+                            'im_info': im_info.asnumpy(),
+                            'boxes': boxes_this_image,
+                            'masks': masks_this_image})
+                            
             pbar.update(data_batch.data[0].shape[0])
 
     # evaluate model
-    imdb.evaluate_detections(all_boxes)
+    results_pack = {'all_boxes': all_boxes,
+                    'all_masks': all_masks,
+                    'results_list': results_list}
+    imdb.evaluate_mask(results_pack)
 
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Test a Faster R-CNN network',
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('--network', type=str, default='vgg16', help='base network')
+    parser.add_argument('--network', type=str, default='resnet50', help='base network')
     parser.add_argument('--params', type=str, default='', help='path to trained model')
-    parser.add_argument('--dataset', type=str, default='voc', help='training dataset')
+    parser.add_argument('--dataset', type=str, default='city', help='training dataset')
     parser.add_argument('--imageset', type=str, default='', help='imageset splits')
     parser.add_argument('--gpu', type=int, default=0, help='gpu device eg. 0')
     # faster rcnn params
@@ -121,6 +142,12 @@ def get_coco(args):
         args.imageset = 'val2017'
     args.rcnn_num_classes = len(coco.classes)
     return coco(args.imageset, 'data', 'data/coco')
+
+
+def get_city(args):
+    from symimdb.cityscape import Cityscape
+    args.rcnn_num_classes = len(Cityscape.classes)
+    return Cityscape('train', 'data', 'data/cityscape')
 
 
 def get_vgg16_test(args):
@@ -180,7 +207,8 @@ def get_resnet101_test(args):
 def get_dataset(dataset, args):
     datasets = {
         'voc': get_voc,
-        'coco': get_coco
+        'coco': get_coco,
+        'city': get_city
     }
     if dataset not in datasets:
         raise ValueError("dataset {} not supported".format(dataset))

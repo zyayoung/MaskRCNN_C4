@@ -206,6 +206,13 @@ def get_resnet_test(anchor_scales, anchor_ratios, rpn_feature_stride,
     # rcnn top feature
     top_feat = get_resnet_top_feature(roi_pool, units=units, filter_list=filter_list)
 
+    
+    mask_deconv1 = mx.symbol.Deconvolution(data=top_feat, kernel=(4, 4), stride=(2, 2), num_filter=256,
+                                            pad=(1, 1), name="mask_deconv1")
+    mask_conv2 = mx.symbol.Convolution(data=mask_deconv1, kernel=(1, 1), num_filter=num_classes,
+                                          name="mask_conv2")
+    mask_prob = mx.symbol.Activation(data=mask_conv2, act_type='sigmoid', name="mask_prob")
+
     bn1 = mx.sym.BatchNorm(data=top_feat, fix_gamma=False, eps=eps, use_global_stats=use_global_stats, name='bn1')
     relu1 = mx.sym.Activation(data=bn1, act_type='relu', name='relu1')
     pool1 = mx.symbol.Pooling(data=relu1, global_pool=True, kernel=(7, 7), pool_type='avg', name='pool1')
@@ -222,5 +229,5 @@ def get_resnet_test(anchor_scales, anchor_ratios, rpn_feature_stride,
     bbox_pred = mx.symbol.Reshape(data=bbox_pred, shape=(rcnn_batch_size, -1, 4 * num_classes), name='bbox_pred_reshape')
 
     # group output
-    group = mx.symbol.Group([rois, cls_prob, bbox_pred])
+    group = mx.symbol.Group([rois, cls_prob, bbox_pred, mask_prob])
     return group

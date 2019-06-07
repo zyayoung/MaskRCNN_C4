@@ -163,12 +163,13 @@ def nms(dets, thresh):
     return keep
 
 
-def im_detect(rois, scores, bbox_deltas, im_info,
+def im_detect(rois, scores, bbox_deltas, mask_output, im_info,
               bbox_stds, nms_thresh, conf_thresh):
     """rois (nroi, 4), scores (nrois, nclasses), bbox_deltas (nrois, 4 * nclasses), im_info (3)"""
     rois = rois.asnumpy()
     scores = scores.asnumpy()
     bbox_deltas = bbox_deltas.asnumpy()
+    mask_output = mask_output.asnumpy()
 
     im_info = im_info.asnumpy()
     height, width, scale = im_info
@@ -182,16 +183,20 @@ def im_detect(rois, scores, bbox_deltas, im_info,
 
     # convert to per class detection results
     det = []
+    masks = []
     for j in range(1, scores.shape[-1]):
         indexes = np.where(scores[:, j] > conf_thresh)[0]
         cls_scores = scores[indexes, j, np.newaxis]
         cls_boxes = pred_boxes[indexes, j * 4:(j + 1) * 4]
         cls_dets = np.hstack((cls_boxes, cls_scores))
+        cls_masks = mask_output[indexes, j, :, :]
         keep = nms(cls_dets, thresh=nms_thresh)
 
         cls_id = np.ones_like(cls_scores) * j
         det.append(np.hstack((cls_id, cls_scores, cls_boxes))[keep, :])
+        masks.append(cls_masks[keep])
 
     # assemble all classes
     det = np.concatenate(det, axis=0)
-    return det
+    masks = np.concatenate(masks, axis=0)
+    return det, masks

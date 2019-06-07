@@ -195,14 +195,22 @@ class Cityscape(IMDB):
                 masks = seg_masks[j]
                 for i in range(len(dets)):
                     bbox = dets[i, :4]
+                    bbox = np.int32(bbox)
+                    bbox[bbox<0] = 0
+                    bbox[1] = min(bbox[1], 500)
+                    bbox[3] = min(bbox[3], 500)
+                    bbox[2] = min(bbox[2], 1000)
+                    bbox[0] = min(bbox[0], 1000)
                     score = dets[i, -1]
-                    bbox = map(int, bbox)
-                    mask_image = np.zeros((int(im_info[0, 0]), int(im_info[0, 1])))
-                    mask = masks[i, :, :]
-                    mask = cv2.resize(mask, (bbox[2] - bbox[0], (bbox[3] - bbox[1])), interpolation=cv2.INTER_LINEAR)
-                    mask[mask > 0.5] = 200
-                    mask[mask <= 0.5] = 0
-                    mask_image[bbox[1]: bbox[3], bbox[0]: bbox[2]] = mask
+                    mask_image = np.zeros((int(im_info[0]), int(im_info[1])))
+                    if int(bbox[2] - bbox[0]) * int(bbox[3] - bbox[1]) == 0:
+                        continue
+                    mask = masks[i, :, :] * 255
+                    mask = cv2.resize(mask, (int(bbox[2] - bbox[0]), int(bbox[3] - bbox[1])), interpolation=cv2.INTER_LINEAR)
+                    # mask[mask > 0.5] = 200
+                    # mask[mask <= 0.5] = 0
+                    print(mask.max())
+                    mask_image[int(bbox[1]): int(bbox[3]), int(bbox[0]): int(bbox[2])] = mask
                     cv2.imwrite(os.path.join(result_path, filename) + '_' + str(count) + '.png', mask_image)
                     f.write('{:s} {:s} {:.8f}\n'.format(filename + '_' + str(count) + '.png', str(labelID), score))
                     count += 1
