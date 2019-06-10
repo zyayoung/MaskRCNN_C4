@@ -23,11 +23,11 @@ def train_net(sym, roidb, args):
 
     # load training data
     feat_sym = sym.get_internals()['rpn_cls_score_output']
-    print(sym.get_internals()['cls_score_output'].infer_shape(
-        data=(1, 3, args.img_long_side, args.img_long_side),
-        gt_boxes=(batch_size, 100, 5),
-        seg=(batch_size, args.img_long_side, args.img_long_side)
-        )[1])
+    # print(sym.get_internals()['cls_score_output'].infer_shape(
+    #     data=(1, 3, args.img_long_side, args.img_long_side),
+    #     gt_boxes=(batch_size, 100, 5),
+    #     seg=(batch_size, args.img_long_side, args.img_long_side)
+    #     )[1])
     # print(sym.get_internals()['label_output'].infer_shape(
     #     data=(1, 3, args.img_long_side, args.img_long_side),
     #     gt_boxes=(batch_size, 100, 5),
@@ -76,15 +76,15 @@ def train_net(sym, roidb, args):
 
     # metric
     rpn_eval_metric = RPNAccMetric()
-    rpn_cls_metric = RPNLogLossMetric()
-    rpn_bbox_metric = RPNL1LossMetric()
+    # rpn_cls_metric = RPNLogLossMetric()
+    # rpn_bbox_metric = RPNL1LossMetric()
     eval_metric = RCNNAccMetric()
-    cls_metric = RCNNLogLossMetric()
-    bbox_metric = RCNNL1LossMetric()
+    # cls_metric = RCNNLogLossMetric()
+    # bbox_metric = RCNNL1LossMetric()
     eval_metrics = mx.metric.CompositeEvalMetric()
     mask_cls_metric = MaskLogLossMetric()
     mask_eval_metric = MaskAccMetric()
-    for child_metric in [rpn_eval_metric, rpn_cls_metric, rpn_bbox_metric, eval_metric, cls_metric, bbox_metric, mask_cls_metric, mask_eval_metric]:
+    for child_metric in [rpn_eval_metric, eval_metric, mask_cls_metric, mask_eval_metric]:
         eval_metrics.add(child_metric)
 
     # callback
@@ -102,7 +102,7 @@ def train_net(sym, roidb, args):
     lr_scheduler = mx.lr_scheduler.MultiFactorScheduler(lr_iters, lr_factor)
     # optimizer
     optimizer_params = {'momentum': 0.9,
-                        'wd': 0.0005,
+                        'wd': 0.0001,
                         'learning_rate': lr,
                         'lr_scheduler': lr_scheduler,
                         'rescale_grad': (1.0 / batch_size),
@@ -127,7 +127,7 @@ def parse_args():
     parser.add_argument('--imageset', type=str, default='', help='imageset splits')
     parser.add_argument('--gpus', type=str, default='0', help='gpu devices eg. 0,1')
     parser.add_argument('--epochs', type=int, default=10, help='training epochs')
-    parser.add_argument('--lr', type=float, default=0.001, help='base learning rate')
+    parser.add_argument('--lr', type=float, default=0.004, help='base learning rate')
     parser.add_argument('--lr-decay-epoch', type=str, default='7', help='epoch to decay lr')
     parser.add_argument('--resume', type=str, default='', help='path to last saved model')
     parser.add_argument('--start-epoch', type=int, default=0, help='start epoch for resuming')
@@ -153,7 +153,7 @@ def parse_args():
     parser.add_argument('--rpn-bg-overlap', type=float, default=0.3)
     parser.add_argument('--rcnn-num-classes', type=int, default=21)
     parser.add_argument('--rcnn-feat-stride', type=int, default=16)
-    parser.add_argument('--rcnn-pooled-size', type=str, default='(14, 14)')
+    parser.add_argument('--rcnn-pooled-size', type=str, default='(7, 7)')
     parser.add_argument('--rcnn-batch-size', type=int, default=1)
     parser.add_argument('--rcnn-batch-rois', type=int, default=128)
     parser.add_argument('--rcnn-fg-fraction', type=float, default=0.25)
@@ -224,7 +224,7 @@ def get_vgg16_train(args):
     args.net_fixed_params = ['conv1', 'conv2']
     args.rpn_feat_stride = 16
     args.rcnn_feat_stride = 16
-    args.rcnn_pooled_size = (14, 14)
+    args.rcnn_pooled_size = (7, 7)
     return get_vgg_train(anchor_scales=args.rpn_anchor_scales, anchor_ratios=args.rpn_anchor_ratios,
                          rpn_feature_stride=args.rpn_feat_stride, rpn_pre_topk=args.rpn_pre_nms_topk,
                          rpn_post_topk=args.rpn_post_nms_topk, rpn_nms_thresh=args.rpn_nms_thresh,
@@ -246,7 +246,7 @@ def get_resnet50_train(args):
     args.net_fixed_params = ['conv0', 'stage1', 'gamma', 'beta']
     args.rpn_feat_stride = 16
     args.rcnn_feat_stride = 16
-    args.rcnn_pooled_size = (14, 14)
+    args.rcnn_pooled_size = (7, 7)
     return get_resnet_train(anchor_scales=args.rpn_anchor_scales, anchor_ratios=args.rpn_anchor_ratios,
                             rpn_feature_stride=args.rpn_feat_stride, rpn_pre_topk=args.rpn_pre_nms_topk,
                             rpn_post_topk=args.rpn_post_nms_topk, rpn_nms_thresh=args.rpn_nms_thresh,
@@ -269,7 +269,7 @@ def get_resnet101_train(args):
     args.net_fixed_params = ['conv0', 'stage1', 'gamma', 'beta']
     args.rpn_feat_stride = 16
     args.rcnn_feat_stride = 16
-    args.rcnn_pooled_size = (14, 14)
+    args.rcnn_pooled_size = (7, 7)
     return get_resnet_train(anchor_scales=args.rpn_anchor_scales, anchor_ratios=args.rpn_anchor_ratios,
                             rpn_feature_stride=args.rpn_feat_stride, rpn_pre_topk=args.rpn_pre_nms_topk,
                             rpn_post_topk=args.rpn_post_nms_topk, rpn_nms_thresh=args.rpn_nms_thresh,

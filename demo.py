@@ -10,6 +10,12 @@ from symdata.loader import load_test, generate_batch
 from symdata.vis import vis_detection
 from symnet.model import load_param, check_shape
 
+import cv2
+import numpy as np
+
+import os
+os.environ['MXNET_CUDNN_AUTOTUNE_DEFAULT'] = "0"
+
 
 def demo_net(sym, class_names, args):
     # print config
@@ -47,21 +53,30 @@ def demo_net(sym, class_names, args):
 
     # forward
     mod.forward(data_batch)
-    rois, scores, bbox_deltas = mod.get_outputs()
+    rois, scores, bbox_deltas, mask_prob = mod.get_outputs()
     rois = rois[:, 1:]
     scores = scores[0]
     bbox_deltas = bbox_deltas[0]
     im_info = im_info[0]
 
     # decode detection
-    det = im_detect(rois, scores, bbox_deltas, im_info,
+    det, masks = im_detect(rois, scores, bbox_deltas, mask_prob, im_info,
                     bbox_stds=args.rcnn_bbox_stds, nms_thresh=args.rcnn_nms_thresh,
                     conf_thresh=args.rcnn_conf_thresh)
 
+    im = cv2.imread(args.image)
+    print(im.shape)
+    print(im_info)
     # print out
-    for [cls, conf, x1, y1, x2, y2] in det:
+    for index, [cls, conf, x1, y1, x2, y2] in enumerate(det):
         if cls > 0 and conf > args.vis_thresh:
             print(class_names[int(cls)], conf, [x1, y1, x2, y2])
+            print((int(x1), int(y1)), (int(x2), int(y2)))
+            cv2.rectangle(im, (int(x1), int(y1)), (int(x2), int(y2)), (255, 0, 0), 10)
+            print(masks[index].max())
+            cv2.imwrite("mask{}.png".format(index), np.uint8(masks[index]*255))
+    
+    cv2.imwrite('demo.png', im)
 
     # if vis
     if args.vis:
@@ -73,7 +88,7 @@ def parse_args():
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('--network', type=str, default='vgg16', help='base network')
     parser.add_argument('--params', type=str, default='', help='path to trained model')
-    parser.add_argument('--dataset', type=str, default='voc', help='training dataset')
+    parser.add_argument('--dataset', type=str, default='city', help='training dataset')
     parser.add_argument('--image', type=str, default='', help='path to test image')
     parser.add_argument('--gpu', type=str, default='', help='gpu device eg. 0')
     parser.add_argument('--vis', action='store_true', help='display results')
@@ -92,7 +107,7 @@ def parse_args():
     parser.add_argument('--rpn-min-size', type=int, default=16)
     parser.add_argument('--rcnn-num-classes', type=int, default=21)
     parser.add_argument('--rcnn-feat-stride', type=int, default=16)
-    parser.add_argument('--rcnn-pooled-size', type=str, default='(14, 14)')
+    parser.add_argument('--rcnn-pooled-size', type=str, default='(7, 7)')
     parser.add_argument('--rcnn-batch-size', type=int, default=1)
     parser.add_argument('--rcnn-bbox-stds', type=str, default='(0.1, 0.1, 0.2, 0.2)')
     parser.add_argument('--rcnn-nms-thresh', type=float, default=0.3)
@@ -119,6 +134,12 @@ def get_coco_names(args):
     return coco.classes
 
 
+def get_city_names(args):
+    from symimdb.cityscape import Cityscape
+    args.rcnn_num_classes = len(Cityscape.classes)
+    return Cityscape.classes
+
+
 def get_vgg16_test(args):
     from symnet.symbol_vgg import get_vgg_test
     if not args.params:
@@ -128,7 +149,7 @@ def get_vgg16_test(args):
     args.net_fixed_params = ['conv1', 'conv2']
     args.rpn_feat_stride = 16
     args.rcnn_feat_stride = 16
-    args.rcnn_pooled_size = (14, 14)
+    args.rcnn_pooled_size = (7, 7)
     return get_vgg_test(anchor_scales=args.rpn_anchor_scales, anchor_ratios=args.rpn_anchor_ratios,
                         rpn_feature_stride=args.rpn_feat_stride, rpn_pre_topk=args.rpn_pre_nms_topk,
                         rpn_post_topk=args.rpn_post_nms_topk, rpn_nms_thresh=args.rpn_nms_thresh,
@@ -145,7 +166,7 @@ def get_resnet50_test(args):
     args.img_pixel_stds = (1.0, 1.0, 1.0)
     args.rpn_feat_stride = 16
     args.rcnn_feat_stride = 16
-    args.rcnn_pooled_size = (14, 14)
+    args.rcnn_pooled_size = (7, 7)
     return get_resnet_test(anchor_scales=args.rpn_anchor_scales, anchor_ratios=args.rpn_anchor_ratios,
                            rpn_feature_stride=args.rpn_feat_stride, rpn_pre_topk=args.rpn_pre_nms_topk,
                            rpn_post_topk=args.rpn_post_nms_topk, rpn_nms_thresh=args.rpn_nms_thresh,
@@ -163,7 +184,7 @@ def get_resnet101_test(args):
     args.img_pixel_stds = (1.0, 1.0, 1.0)
     args.rpn_feat_stride = 16
     args.rcnn_feat_stride = 16
-    args.rcnn_pooled_size = (14, 14)
+    args.rcnn_pooled_size = (7, 7)
     return get_resnet_test(anchor_scales=args.rpn_anchor_scales, anchor_ratios=args.rpn_anchor_ratios,
                            rpn_feature_stride=args.rpn_feat_stride, rpn_pre_topk=args.rpn_pre_nms_topk,
                            rpn_post_topk=args.rpn_post_nms_topk, rpn_nms_thresh=args.rpn_nms_thresh,
@@ -175,7 +196,8 @@ def get_resnet101_test(args):
 def get_class_names(dataset, args):
     datasets = {
         'voc': get_voc_names,
-        'coco': get_coco_names
+        'coco': get_coco_names,
+        'city': get_city_names
     }
     if dataset not in datasets:
         raise ValueError("dataset {} not supported".format(dataset))

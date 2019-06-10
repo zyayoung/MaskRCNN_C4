@@ -22,11 +22,12 @@ def compute_mask_and_label(ex_rois, ex_labels, seg, flipped=False):
     n_rois = ex_rois.shape[0]
     label = ex_labels
     class_id = [0, 24, 25, 26, 27, 28, 31, 32, 33]
-    mask_target = np.zeros((n_rois, 14, 14), dtype=np.int8)
+    mask_target = np.zeros((n_rois, 28, 28), dtype=np.int8)
     mask_label = np.zeros((n_rois), dtype=np.int8)
-    # print(rois.shape)
+    # print(rois)
     for n in range(n_rois):
         target = ins_seg[int(rois[n, 1]): int(rois[n, 3]), int(rois[n, 0]): int(rois[n, 2])]
+        # print(target.shape)
         ids = np.unique(target)
         ins_id = 0
         max_count = 0
@@ -56,7 +57,8 @@ def compute_mask_and_label(ex_rois, ex_labels, seg, flipped=False):
         mask = np.zeros(target.shape)
         idx = np.where(target == ins_id)
         mask[idx] = 1
-        mask = cv2.resize(mask, (14, 14), interpolation=cv2.INTER_NEAREST)
+        # cv2.imwrite('tmp/mask_train{}_{}_{}.jpg'.format(n, id, np.random.randint(1000)), mask*255)
+        mask = cv2.resize(mask, (28, 28), interpolation=cv2.INTER_LINEAR)
 
         mask_target[n] = mask
         mask_label[n] = label[int(n)]
@@ -111,19 +113,20 @@ def sample_rois(rois, gt_boxes, num_classes, rois_per_image, fg_rois_per_image, 
     # set labels of bg rois to be 0
     labels[fg_rois_this_image:] = 0
 
-    mask_targets = np.zeros((rois_per_image, num_classes, 14, 14), dtype=np.int8)
+    mask_targets = np.zeros((rois_per_image, num_classes, 28, 28), dtype=np.int8)
     mask_weights = np.zeros((rois_per_image, num_classes, 1, 1), dtype=np.int8)
 
     _mask_targets, _mask_labels = compute_mask_and_label(rois[:fg_rois_this_image], labels[:fg_rois_this_image], seg)
     mask_targets[:fg_rois_this_image, _mask_labels] = _mask_targets
     mask_weights[:fg_rois_this_image, _mask_labels] = 1
+    im = np.uint8(seg[0]/1000)
+    # cv2.imwrite('tmp/im.jpg', im)
+    # cv2.rectangle(im, (int(roi[1]), int(roi[2])), (int(roi[3]), int(roi[4])), (255, 0, 0))
     # cv2.imwrite(_mask_targets[])
 
-    roi_idx = _mask_labels.argmax()
-    sample = mask_targets[roi_idx, _mask_labels[roi_idx]]
-    print(sample.sum())
-    if sample.sum() > 0:
-        cv2.imwrite("mask.png", np.uint8(sample * 200))
+    # roi_idx = _mask_labels.argmax()
+    # sample = mask_targets[roi_idx, _mask_labels[roi_idx]]
+    # print(_mask_labels)
 
     # load or compute bbox_target
     targets = bbox_transform(rois[:, 1:], gt_boxes[gt_assignment[keep_indexes], :4], box_stds=box_stds)
@@ -159,7 +162,7 @@ class ProposalTargetOperator(mx.operator.CustomOp):
         labels = np.empty((0, ), dtype=np.float32)
         bbox_targets = np.empty((0, 4 * self._num_classes), dtype=np.float32)
         bbox_weights = np.empty((0, 4 * self._num_classes), dtype=np.float32)
-        mask_targets = np.empty((0, self._num_classes, 14, 14), dtype=np.int8)
+        mask_targets = np.empty((0, self._num_classes, 28, 28), dtype=np.int8)
         mask_weights = np.empty((0, self._num_classes, 1, 1), dtype=np.int8)
         for batch_idx in range(self._batch_images):
             b_rois = all_rois[np.where(all_rois[:, 0] == batch_idx)[0]]
@@ -224,7 +227,7 @@ class ProposalTargetProp(mx.operator.CustomOpProp):
         label_shape = (self._batch_rois, )
         bbox_target_shape = (self._batch_rois, self._num_classes * 4)
         bbox_weight_shape = (self._batch_rois, self._num_classes * 4)
-        mask_target_shape = (self._batch_rois, self._num_classes, 14, 14)
+        mask_target_shape = (self._batch_rois, self._num_classes, 28, 28)
         mask_weight_shape = (self._batch_rois, self._num_classes, 1, 1)
 
         return [rpn_rois_shape, gt_boxes_shape, seg_shape], \

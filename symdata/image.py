@@ -32,9 +32,12 @@ def get_image(roi_rec, short, max_size, mean, std):
         gt_boxes = np.empty((0, 5), dtype=np.float32)
     
     im_seg = Image.open(roi_rec['ins_seg'])
-    im_seg.resize((height, width), Image.NEAREST)
+    im_seg = im_seg.resize((width, height), Image.NEAREST)
     pixel = list(im_seg.getdata())
     ins_seg = np.array(pixel).reshape([im_seg.size[1], im_seg.size[0]])
+    # print(ins_seg.shape)
+    if roi_rec["flipped"]:
+        ins_seg = ins_seg[::-1, :]
 
     return im_tensor, im_info, gt_boxes, ins_seg
 

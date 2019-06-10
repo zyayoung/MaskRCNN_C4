@@ -145,6 +145,7 @@ class AnchorLoader(mx.io.DataIter):
         self._label = None
         
         self.q = Queue()
+        self.work_lock = td.Lock()
         self.work_on_next()
 
         # get first batch to fill in provide_data and provide_label
@@ -170,8 +171,8 @@ class AnchorLoader(mx.io.DataIter):
         return self._cur + self._batch_size <= self._size
     
     def next_multithread(self):
+        self.work_lock.acquire()
         if self.iter_next():
-            time.sleep(0.00001)
             data_batch = mx.io.DataBatch(data=self.getdata(), label=self.getlabel(),
                                          pad=self.getpad(), index=self.getindex(),
                                          provide_data=self.provide_data, provide_label=self.provide_label)
@@ -179,6 +180,7 @@ class AnchorLoader(mx.io.DataIter):
             self.q.put(data_batch)
         else:
             self.q.put('StopIteration')
+        self.work_lock.release()
      
     def work_on_next(self):
         t = td.Thread(target=self.next_multithread, daemon=True)
