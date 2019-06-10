@@ -117,10 +117,12 @@ def sample_rois(rois, gt_boxes, num_classes, rois_per_image, fg_rois_per_image, 
     mask_weights = np.zeros((rois_per_image, num_classes, 1, 1), dtype=np.int8)
 
     _mask_targets, _mask_labels = compute_mask_and_label(rois[:fg_rois_this_image], labels[:fg_rois_this_image], seg)
-    mask_targets[:fg_rois_this_image, _mask_labels] = _mask_targets
-    mask_weights[:fg_rois_this_image, _mask_labels] = 1
-    im = np.uint8(seg[0]/1000)
+    for i in range(fg_rois_this_image):
+        mask_targets[i, _mask_labels[i]] = _mask_targets[i]
+        mask_weights[i, _mask_labels[i]] = 1
+    # im = np.uint8(seg[0]/1000)
     # cv2.imwrite('tmp/im.jpg', im)
+    # print(mask_weights[:,:,0,0], _mask_labels)
     # cv2.rectangle(im, (int(roi[1]), int(roi[2])), (int(roi[3]), int(roi[4])), (255, 0, 0))
     # cv2.imwrite(_mask_targets[])
 
