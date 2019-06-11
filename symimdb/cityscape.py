@@ -23,10 +23,12 @@ class Cityscape(IMDB):
         self.image_set = image_set
         self.root_path = root_path
         self.data_path = dataset_path
+
         
         self.class_id = [0, 24, 25, 26, 27, 28, 31, 32, 33]
         self.image_set_index = self.load_image_set_index()
         self._roidb = self._get_cached('roidb', self._load_gt_roidb)
+        # self._roidb = self._roidb[:20]
         print('num_images', self.num_images)
 
     def load_image_set_index(self):
