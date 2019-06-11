@@ -69,11 +69,11 @@ def demo_net(sym, class_names, args):
     print(im_info)
     # print out
     for index, [cls, conf, x1, y1, x2, y2] in enumerate(det):
+        print(masks[index].max())
         if cls > 0 and conf > args.vis_thresh:
             print(class_names[int(cls)], conf, [x1, y1, x2, y2])
             print((int(x1), int(y1)), (int(x2), int(y2)))
             cv2.rectangle(im, (int(x1), int(y1)), (int(x2), int(y2)), (255, 0, 0), 10)
-            print(masks[index].max())
             cv2.imwrite("mask{}.png".format(index), np.uint8(masks[index]*255))
     
     cv2.imwrite('demo.png', im)

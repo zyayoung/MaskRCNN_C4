@@ -76,15 +76,24 @@ def train_net(sym, roidb, args):
 
     # metric
     rpn_eval_metric = RPNAccMetric()
-    # rpn_cls_metric = RPNLogLossMetric()
-    # rpn_bbox_metric = RPNL1LossMetric()
+    rpn_cls_metric = RPNLogLossMetric()
+    rpn_bbox_metric = RPNL1LossMetric()
     eval_metric = RCNNAccMetric()
-    # cls_metric = RCNNLogLossMetric()
-    # bbox_metric = RCNNL1LossMetric()
+    cls_metric = RCNNLogLossMetric()
+    bbox_metric = RCNNL1LossMetric()
     eval_metrics = mx.metric.CompositeEvalMetric()
     mask_cls_metric = MaskLogLossMetric()
     mask_eval_metric = MaskAccMetric()
-    for child_metric in [rpn_eval_metric, eval_metric, mask_cls_metric, mask_eval_metric]:
+    for child_metric in [
+        rpn_eval_metric,
+        rpn_cls_metric,
+        rpn_bbox_metric,
+        eval_metric,
+        cls_metric,
+        bbox_metric,
+        mask_cls_metric,
+        mask_eval_metric
+    ]:
         eval_metrics.add(child_metric)
 
     # callback
