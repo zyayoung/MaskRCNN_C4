@@ -20,8 +20,12 @@ def compute_mask_and_label_single(roi, label, ins_seg):
     ids = np.unique(target)
     ins_id = 0
     max_count = 0
-    for id in ids:
-        if math.floor(id / 1000) == class_id[int(label)]:
+    ids = ids[np.floor(ids / 1000) == class_id[int(label)]]
+    if len(ids) == 1:
+        ins_id = ids[0]
+        max_count = 1
+    else:
+        for id in ids:
             px = np.where(ins_seg == int(id))
             x_min = np.min(px[1])
             y_min = np.min(px[0])
