@@ -19,7 +19,7 @@ class Cityscape(IMDB):
         :param dataset_path: data and results
         :return: imdb object
         """
-        super(Cityscape, self).__init__('cityscape', root_path)
+        super(Cityscape, self).__init__('cityscape_'+image_set, root_path)
         self.image_set = image_set
         self.root_path = root_path
         self.data_path = dataset_path
@@ -173,8 +173,8 @@ class Cityscape(IMDB):
     #     return roidb
 
     def evaluate_mask(self, results_pack):
-        for result_rec in results_pack['results_list']:
-            image_path = result_rec['image']
+        for idx, result_rec in enumerate(results_pack['results_list']):
+            image_path = self._roidb[idx]['image']
             im_info = result_rec['im_info']
             detections = result_rec['boxes']
             seg_masks = result_rec['masks']
@@ -199,19 +199,20 @@ class Cityscape(IMDB):
                     bbox = dets[i, :4]
                     bbox = np.int32(bbox)
                     bbox[bbox<0] = 0
-                    bbox[1] = min(bbox[1], 500)
-                    bbox[3] = min(bbox[3], 500)
-                    bbox[2] = min(bbox[2], 1000)
-                    bbox[0] = min(bbox[0], 1000)
+                    # print(bbox, im_info)
+                    bbox[1] = min(bbox[1], im_info[0])
+                    bbox[3] = min(bbox[3], im_info[0])
+                    bbox[2] = min(bbox[2], im_info[1])
+                    bbox[0] = min(bbox[0], im_info[1])
                     score = dets[i, -1]
                     mask_image = np.zeros((int(im_info[0]), int(im_info[1])))
                     if int(bbox[2] - bbox[0]) * int(bbox[3] - bbox[1]) == 0:
                         continue
-                    mask = masks[i, :, :] * 255
+                    mask = masks[i, :, :]
                     mask = cv2.resize(mask, (int(bbox[2] - bbox[0]), int(bbox[3] - bbox[1])), interpolation=cv2.INTER_LINEAR)
-                    # mask[mask > 0.5] = 200
-                    # mask[mask <= 0.5] = 0
-                    print(mask.max())
+                    mask[mask > 0.5] = 200
+                    mask[mask <= 0.5] = 0
+                    # print(mask.max())
                     mask_image[int(bbox[1]): int(bbox[3]), int(bbox[0]): int(bbox[2])] = mask
                     cv2.imwrite(os.path.join(result_path, filename) + '_' + str(count) + '.png', mask_image)
                     f.write('{:s} {:s} {:.8f}\n'.format(filename + '_' + str(count) + '.png', str(labelID), score))

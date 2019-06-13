@@ -138,7 +138,7 @@ class MaskLogLossMetric(mx.metric.EvalMetric):
     def update(self, labels, preds):
         # reshape and concat
         label = preds[self.pred.index('rcnn_label')].asnumpy().reshape((-1,)).astype('Int32')
-        mask_target = preds[self.pred.index('mask_target')].asnumpy().reshape((-1, 9, 28, 28))
+        mask_target = preds[self.pred.index('mask_target')].asnumpy().reshape((-1, 9, 14, 14))
         mask_weight = preds[self.pred.index('mask_weight')].asnumpy().reshape((-1, 9, 1,1))
         mask_prob = preds[self.pred.index('mask_prob')].asnumpy()  # (n_rois, c, h, w)
 
@@ -159,7 +159,7 @@ class MaskAccMetric(mx.metric.EvalMetric):
     def update(self, labels, preds):
         # reshape and concat
         label = preds[self.pred.index('rcnn_label')].asnumpy().reshape((-1,)).astype('Int32')
-        mask_target = preds[self.pred.index('mask_target')].asnumpy().reshape((-1, 9, 28, 28))
+        mask_target = preds[self.pred.index('mask_target')].asnumpy().reshape((-1, 9, 14, 14))
         mask_weight = preds[self.pred.index('mask_weight')].asnumpy().reshape((-1, 9, 1,1))
         mask_prob = preds[self.pred.index('mask_prob')].asnumpy()  # (n_rois, c, h, w)
 

@@ -11,8 +11,10 @@ def load_param(params, ctx=None):
     for k, v in save_dict.items():
         tp, name = k.split(':', 1)
         if tp == 'arg':
+            # print(name, v.shape)
             arg_params[name] = v.as_in_context(ctx)
         if tp == 'aux':
+            # print(name)
             aux_params[name] = v.as_in_context(ctx)
     return arg_params, aux_params
 
@@ -59,12 +61,12 @@ def initialize_frcnn(symbol, data_shapes, arg_params, aux_params):
     arg_params['bbox_pred_weight'] = mx.random.normal(0, 0.001, shape=arg_shape_dict['bbox_pred_weight'])
     arg_params['bbox_pred_bias'] = mx.nd.zeros(shape=arg_shape_dict['bbox_pred_bias'])
     arg_params['mask_deconv1_weight'] = mx.random.normal(0, 0.001, shape=arg_shape_dict['mask_deconv1_weight'])
-    arg_params['mask_deconv2_weight'] = mx.random.normal(0, 0.001, shape=arg_shape_dict['mask_deconv2_weight'])
+    # arg_params['mask_deconv2_weight'] = mx.random.normal(0, 0.001, shape=arg_shape_dict['mask_deconv2_weight'])
     arg_params['mask_conv2_weight'] = mx.random.normal(0, 0.001, shape=arg_shape_dict['mask_conv2_weight'])
     arg_params['mask_conv2_bias'] = mx.nd.zeros(shape=arg_shape_dict['mask_conv2_bias'])
-    for i in range(1, 5):
-        arg_params['mask_conv_t{}_weight'.format(i)] = mx.random.normal(0, 0.001, shape=arg_shape_dict['mask_conv_t{}_weight'.format(i)])
-        arg_params['mask_conv_t{}_bias'.format(i)] = mx.nd.zeros(shape=arg_shape_dict['mask_conv_t{}_bias'.format(i)])
+    # for i in range(1, 5):
+    #     arg_params['mask_conv_t{}_weight'.format(i)] = mx.random.normal(0, 0.001, shape=arg_shape_dict['mask_conv_t{}_weight'.format(i)])
+    #     arg_params['mask_conv_t{}_bias'.format(i)] = mx.nd.zeros(shape=arg_shape_dict['mask_conv_t{}_bias'.format(i)])
     
     return arg_params, aux_params
 

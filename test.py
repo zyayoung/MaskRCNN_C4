@@ -100,8 +100,8 @@ def parse_args():
     parser.add_argument('--imageset', type=str, default='', help='imageset splits')
     parser.add_argument('--gpu', type=int, default=0, help='gpu device eg. 0')
     # faster rcnn params
-    parser.add_argument('--img-short-side', type=int, default=600)
-    parser.add_argument('--img-long-side', type=int, default=1000)
+    parser.add_argument('--img-short-side', type=int, default=1024)
+    parser.add_argument('--img-long-side', type=int, default=2048)
     parser.add_argument('--img-pixel-means', type=str, default='(0.0, 0.0, 0.0)')
     parser.add_argument('--img-pixel-stds', type=str, default='(1.0, 1.0, 1.0)')
     parser.add_argument('--rpn-feat-stride', type=int, default=16)
@@ -116,7 +116,7 @@ def parse_args():
     parser.add_argument('--rcnn-pooled-size', type=str, default='(7, 7)')
     parser.add_argument('--rcnn-batch-size', type=int, default=1)
     parser.add_argument('--rcnn-bbox-stds', type=str, default='(0.1, 0.1, 0.2, 0.2)')
-    parser.add_argument('--rcnn-nms-thresh', type=float, default=0.3)
+    parser.add_argument('--rcnn-nms-thresh', type=float, default=0.5)
     parser.add_argument('--rcnn-conf-thresh', type=float, default=1e-3)
     args = parser.parse_args()
     args.img_pixel_means = ast.literal_eval(args.img_pixel_means)
@@ -146,8 +146,10 @@ def get_coco(args):
 
 def get_city(args):
     from symimdb.cityscape import Cityscape
+    if not args.imageset:
+        args.imageset = 'val'
     args.rcnn_num_classes = len(Cityscape.classes)
-    return Cityscape('train', 'data', 'data/cityscape')
+    return Cityscape(args.imageset, 'data', 'data/cityscape')
 
 
 def get_vgg16_test(args):

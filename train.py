@@ -143,8 +143,8 @@ def parse_args():
     parser.add_argument('--log-interval', type=int, default=100, help='logging mini batch interval')
     parser.add_argument('--save-prefix', type=str, default='', help='saving params prefix')
     # faster rcnn params
-    parser.add_argument('--img-short-side', type=int, default=600)
-    parser.add_argument('--img-long-side', type=int, default=1000)
+    parser.add_argument('--img-short-side', type=int, default=1024)
+    parser.add_argument('--img-long-side', type=int, default=2048)
     parser.add_argument('--img-pixel-means', type=str, default='(0.0, 0.0, 0.0)')
     parser.add_argument('--img-pixel-stds', type=str, default='(1.0, 1.0, 1.0)')
     parser.add_argument('--net-fixed-params', type=str, default='["conv0", "stage1", "gamma", "beta"]')

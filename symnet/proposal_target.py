@@ -7,8 +7,49 @@ import numpy as np
 import cv2
 import PIL.Image as Image
 import math
+import time
 
 from symdata.bbox import bbox_overlaps, bbox_transform
+
+def compute_mask_and_label_single(roi, label, ins_seg):
+    class_id = [0, 24, 25, 26, 27, 28, 31, 32, 33]
+    # ins_seg = ins_seg[::2,::2]
+    # roi /= 2
+    target = ins_seg[int(roi[1]): int(roi[3]), int(roi[0]): int(roi[2])]
+    # print(target.shape)
+    ids = np.unique(target)
+    ins_id = 0
+    max_count = 0
+    for id in ids:
+        if math.floor(id / 1000) == class_id[int(label)]:
+            px = np.where(ins_seg == int(id))
+            x_min = np.min(px[1])
+            y_min = np.min(px[0])
+            x_max = np.max(px[1])
+            y_max = np.max(px[0])
+            x1 = max(roi[0], x_min)
+            y1 = max(roi[1], y_min)
+            x2 = min(roi[2], x_max)
+            y2 = min(roi[3], y_max)
+            iou = (x2 - x1) * (y2 - y1)
+            iou = iou / ((roi[2] - roi[0]) * (roi[3] - roi[1])
+                            + (x_max - x_min) * (y_max - y_min) - iou)
+                            
+            # print(math.floor(id / 1000), x_min, y_min, x_max, y_max, iou)
+            if iou > max_count:
+                ins_id = id
+                max_count = iou
+
+    if max_count == 0:
+        return np.zeros((14, 14)), 0
+    # print max_count
+    mask = np.zeros(target.shape)
+    idx = np.where(target == ins_id)
+    mask[idx] = 1
+    # cv2.imwrite('tmp/mask_train{}_{}_{}.jpg'.format(n, id, np.random.randint(1000)), mask*255)
+    mask = cv2.resize(mask, (14, 14), interpolation=cv2.INTER_LINEAR)
+
+    return mask, label
 
 def compute_mask_and_label(ex_rois, ex_labels, seg, flipped=False):
     # assert os.path.exists(seg_gt), 'Path does not exist: {}'.format(seg_gt)
@@ -16,52 +57,19 @@ def compute_mask_and_label(ex_rois, ex_labels, seg, flipped=False):
     # pixel = list(im.getdata())
     # pixel = np.array(pixel).reshape([im.size[1], im.size[0]])
     ins_seg = seg
-    # print(ins_seg)
+    # print(ins_seg.shape)
     rois = ex_rois[:,1:]
     # print(rois)
     n_rois = ex_rois.shape[0]
     label = ex_labels
     class_id = [0, 24, 25, 26, 27, 28, 31, 32, 33]
-    mask_target = np.zeros((n_rois, 28, 28), dtype=np.int8)
+    mask_target = np.zeros((n_rois, 14, 14), dtype=np.int8)
     mask_label = np.zeros((n_rois), dtype=np.int8)
-    # print(rois)
     for n in range(n_rois):
-        target = ins_seg[int(rois[n, 1]): int(rois[n, 3]), int(rois[n, 0]): int(rois[n, 2])]
-        # print(target.shape)
-        ids = np.unique(target)
-        ins_id = 0
-        max_count = 0
-        for id in ids:
-            if math.floor(id / 1000) == class_id[int(label[int(n)])]:
-                px = np.where(ins_seg == int(id))
-                x_min = np.min(px[1])
-                y_min = np.min(px[0])
-                x_max = np.max(px[1])
-                y_max = np.max(px[0])
-                x1 = max(rois[n, 0], x_min)
-                y1 = max(rois[n, 1], y_min)
-                x2 = min(rois[n, 2], x_max)
-                y2 = min(rois[n, 3], y_max)
-                iou = (x2 - x1) * (y2 - y1)
-                iou = iou / ((rois[n, 2] - rois[n, 0]) * (rois[n, 3] - rois[n, 1])
-                             + (x_max - x_min) * (y_max - y_min) - iou)
-                             
-                # print(math.floor(id / 1000), x_min, y_min, x_max, y_max, iou)
-                if iou > max_count:
-                    ins_id = id
-                    max_count = iou
+        _mask, _label = compute_mask_and_label_single(rois[n], label[n], seg)
 
-        if max_count == 0:
-            continue
-        # print max_count
-        mask = np.zeros(target.shape)
-        idx = np.where(target == ins_id)
-        mask[idx] = 1
-        # cv2.imwrite('tmp/mask_train{}_{}_{}.jpg'.format(n, id, np.random.randint(1000)), mask*255)
-        mask = cv2.resize(mask, (28, 28), interpolation=cv2.INTER_LINEAR)
-
-        mask_target[n] = mask
-        mask_label[n] = label[int(n)]
+        mask_target[n] = _mask
+        mask_label[n] = _label
     return mask_target, mask_label
 
 
@@ -113,10 +121,13 @@ def sample_rois(rois, gt_boxes, num_classes, rois_per_image, fg_rois_per_image, 
     # set labels of bg rois to be 0
     labels[fg_rois_this_image:] = 0
 
-    mask_targets = np.zeros((rois_per_image, num_classes, 28, 28), dtype=np.int8)
+    mask_targets = np.zeros((rois_per_image, num_classes, 14, 14), dtype=np.int8)
     mask_weights = np.zeros((rois_per_image, num_classes, 1, 1), dtype=np.int8)
     # print(seg.shape)
+    # t = time.clock()
+    # print('#', end='', flush=True)
     _mask_targets, _mask_labels = compute_mask_and_label(rois[:fg_rois_this_image], labels[:fg_rois_this_image], seg)
+    # print(time.clock()-t)
     # rand = np.random.randint(1000000)
     # im = cv2.cvtColor(seg, cv2.COLOR_GRAY2BGR)
     for i in range(fg_rois_this_image):
@@ -172,7 +183,7 @@ class ProposalTargetOperator(mx.operator.CustomOp):
         labels = np.empty((0, ), dtype=np.float32)
         bbox_targets = np.empty((0, 4 * self._num_classes), dtype=np.float32)
         bbox_weights = np.empty((0, 4 * self._num_classes), dtype=np.float32)
-        mask_targets = np.empty((0, self._num_classes, 28, 28), dtype=np.int8)
+        mask_targets = np.empty((0, self._num_classes, 14, 14), dtype=np.int8)
         mask_weights = np.empty((0, self._num_classes, 1, 1), dtype=np.int8)
         for batch_idx in range(self._batch_images):
             b_rois = all_rois[np.where(all_rois[:, 0] == batch_idx)[0]]
@@ -238,7 +249,7 @@ class ProposalTargetProp(mx.operator.CustomOpProp):
         label_shape = (self._batch_rois, )
         bbox_target_shape = (self._batch_rois, self._num_classes * 4)
         bbox_weight_shape = (self._batch_rois, self._num_classes * 4)
-        mask_target_shape = (self._batch_rois, self._num_classes, 28, 28)
+        mask_target_shape = (self._batch_rois, self._num_classes, 14, 14)
         mask_weight_shape = (self._batch_rois, self._num_classes, 1, 1)
 
         return [rpn_rois_shape, gt_boxes_shape, seg_shape], \

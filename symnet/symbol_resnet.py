@@ -151,7 +151,7 @@ def get_resnet_train(anchor_scales, anchor_ratios, rpn_feature_stride,
     mask_deconv2 = mx.symbol.Deconvolution(data=mask_conv_tmp, kernel=(2, 2), stride=(2, 2), num_filter=256,
                                             name="mask_deconv2")
     mask_relu2 = mx.symbol.Activation(data=mask_deconv2, act_type="relu")
-    mask_conv2 = mx.symbol.Convolution(data=mask_relu2, kernel=(1, 1), num_filter=num_classes,
+    mask_conv2 = mx.symbol.Convolution(data=mask_relu1, kernel=(1, 1), num_filter=num_classes,
                                           name="mask_conv2")
     mask_prob = mx.symbol.Activation(data=mask_conv2, act_type='sigmoid', name="mask_prob")
     mask_output = mx.symbol.Custom(mask_prob=mask_prob, mask_target=mask_target, mask_weight=mask_weight,
@@ -240,9 +240,9 @@ def get_resnet_test(anchor_scales, anchor_ratios, rpn_feature_stride,
                                           name="mask_conv_t4")
     mask_conv_tmp = mx.symbol.Activation(data=mask_conv_tmp, act_type="relu")
     mask_deconv2 = mx.symbol.Deconvolution(data=mask_conv_tmp, kernel=(2, 2), stride=(2, 2), num_filter=256,
-                                            name="mask_deconv2")
+                                            name="mask_deconv2") 
     mask_relu2 = mx.symbol.Activation(data=mask_deconv2, act_type="relu")
-    mask_conv2 = mx.symbol.Convolution(data=mask_relu2, kernel=(1, 1), num_filter=num_classes,
+    mask_conv2 = mx.symbol.Convolution(data=mask_relu1, kernel=(1, 1), num_filter=num_classes,
                                           name="mask_conv2")
     mask_prob = mx.symbol.Activation(data=mask_conv2, act_type='sigmoid', name="mask_prob")
     pool1 = mx.symbol.Pooling(data=top_feat, global_pool=True, kernel=(7, 7), pool_type='avg', name='pool1')
