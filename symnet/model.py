@@ -39,6 +39,20 @@ def check_shape(symbol, data_shapes, arg_params, aux_params):
     for k in symbol.list_arguments():
         if k in data_shape_dict or 'label' in k:
             continue
+        if k not in arg_params:
+            if k.split('_')[-1] == 'bias':
+                print("{} not initialized. Initiaizing with 0.".format(k))
+                arg_params[k] = mx.nd.zeros(shape=arg_shape_dict[k])
+            else:
+                print("{} not initialized. Initiaizing with normal.".format(k))
+                arg_params[k] = mx.random.normal(0, 0.001, shape=arg_shape_dict[k])
+        if arg_params[k].shape != arg_shape_dict[k]:
+            if k.split('_')[-1] == 'bias':
+                print("{} shape inconsistent. Initiaizing with 0.".format(k))
+                arg_params[k] = mx.nd.zeros(shape=arg_shape_dict[k])
+            else:
+                print("{} shape inconsistent. Initiaizing with normal.".format(k))
+                arg_params[k] = mx.random.normal(0, 0.001, shape=arg_shape_dict[k])
         assert k in arg_params, '%s not initialized' % k
         assert arg_params[k].shape == arg_shape_dict[k], \
             'shape inconsistent for %s inferred %s provided %s' % (k, arg_shape_dict[k], arg_params[k].shape)

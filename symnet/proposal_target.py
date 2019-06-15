@@ -51,7 +51,7 @@ def compute_mask_and_label_single(roi, label, ins_seg):
     idx = np.where(target == ins_id)
     mask[idx] = 1
     # cv2.imwrite('tmp/mask_train{}_{}_{}.jpg'.format(n, id, np.random.randint(1000)), mask*255)
-    mask = cv2.resize(mask, (14, 14), interpolation=cv2.INTER_LINEAR)
+    mask = cv2.resize(mask, (14, 14), interpolation=cv2.INTER_NEAREST)
 
     return mask, label
 

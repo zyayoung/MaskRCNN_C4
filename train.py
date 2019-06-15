@@ -149,7 +149,7 @@ def parse_args():
     parser.add_argument('--img-pixel-stds', type=str, default='(1.0, 1.0, 1.0)')
     parser.add_argument('--net-fixed-params', type=str, default='["conv0", "stage1", "gamma", "beta"]')
     parser.add_argument('--rpn-feat-stride', type=int, default=16)
-    parser.add_argument('--rpn-anchor-scales', type=str, default='(8, 16, 32)')
+    parser.add_argument('--rpn-anchor-scales', type=str, default='(8, 16, 32, 64, 128)')
     parser.add_argument('--rpn-anchor-ratios', type=str, default='(0.5, 1, 2)')
     parser.add_argument('--rpn-pre-nms-topk', type=int, default=12000)
     parser.add_argument('--rpn-post-nms-topk', type=int, default=2000)

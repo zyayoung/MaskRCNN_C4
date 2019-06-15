@@ -210,7 +210,7 @@ class Cityscape(IMDB):
                         continue
                     mask = masks[i, :, :]
                     mask = cv2.resize(mask, (int(bbox[2] - bbox[0]), int(bbox[3] - bbox[1])), interpolation=cv2.INTER_LINEAR)
-                    mask[mask > 0.5] = 200
+                    mask[mask > 0.5] = 255
                     mask[mask <= 0.5] = 0
                     # print(mask.max())
                     mask_image[int(bbox[1]): int(bbox[3]), int(bbox[0]): int(bbox[2])] = mask
