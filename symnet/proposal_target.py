@@ -8,10 +8,12 @@ import cv2
 import PIL.Image as Image
 import math
 import time
+import threading as td
+from queue import Queue
 
 from symdata.bbox import bbox_overlaps, bbox_transform
 
-def compute_mask_and_label_single(roi, label, ins_seg):
+def compute_mask_and_label_single(roi, label, ins_seg, q, n):
     class_id = [0, 24, 25, 26, 27, 28, 31, 32, 33]
     # ins_seg = ins_seg[::2,::2]
     # roi /= 2
@@ -45,15 +47,17 @@ def compute_mask_and_label_single(roi, label, ins_seg):
                 max_count = iou
 
     if max_count == 0:
-        return np.zeros((14, 14)), 0
-    # print max_count
-    mask = np.zeros(target.shape)
-    idx = np.where(target == ins_id)
-    mask[idx] = 1
-    # cv2.imwrite('tmp/mask_train{}_{}_{}.jpg'.format(n, id, np.random.randint(1000)), mask*255)
-    mask = cv2.resize(mask, (14, 14), interpolation=cv2.INTER_NEAREST)
+        q.put((n, np.zeros((14, 14)), 0))
 
-    return mask, label
+    else:
+        # print max_count
+        mask = np.zeros(target.shape)
+        idx = np.where(target == ins_id)
+        mask[idx] = 1
+        # cv2.imwrite('tmp/mask_train{}_{}_{}.jpg'.format(n, id, np.random.randint(1000)), mask*255)
+        mask = cv2.resize(mask, (14, 14), interpolation=cv2.INTER_LINEAR)
+
+        q.put((n, mask, label))
 
 def compute_mask_and_label(ex_rois, ex_labels, seg, flipped=False):
     # assert os.path.exists(seg_gt), 'Path does not exist: {}'.format(seg_gt)
@@ -69,8 +73,15 @@ def compute_mask_and_label(ex_rois, ex_labels, seg, flipped=False):
     class_id = [0, 24, 25, 26, 27, 28, 31, 32, 33]
     mask_target = np.zeros((n_rois, 14, 14), dtype=np.int8)
     mask_label = np.zeros((n_rois), dtype=np.int8)
+    q = Queue()
+    t_list = []
     for n in range(n_rois):
-        _mask, _label = compute_mask_and_label_single(rois[n], label[n], seg)
+        t = td.Thread(target=compute_mask_and_label_single, args=(rois[n], label[n], seg, q, n))
+        t.start()
+        t_list.append(t)
+    for t in t_list:
+        t.join()
+        n, _mask, _label = q.get()
 
         mask_target[n] = _mask
         mask_label[n] = _label

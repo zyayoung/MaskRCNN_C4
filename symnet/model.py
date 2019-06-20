@@ -57,6 +57,12 @@ def check_shape(symbol, data_shapes, arg_params, aux_params):
         assert arg_params[k].shape == arg_shape_dict[k], \
             'shape inconsistent for %s inferred %s provided %s' % (k, arg_shape_dict[k], arg_params[k].shape)
     for k in symbol.list_auxiliary_states():
+        if k not in aux_params:
+            print("{} not initialized. Initiaizing with 0.".format(k))
+            aux_params[k] = mx.nd.zeros(shape=aux_shape_dict[k])
+        if aux_params[k].shape != aux_shape_dict[k]:
+            print("{} shape inconsistent. Initiaizing with 0.".format(k))
+            aux_params[k] = mx.nd.zeros(shape=aux_shape_dict[k])
         assert k in aux_params, '%s not initialized' % k
         assert aux_params[k].shape == aux_shape_dict[k], \
             'shape inconsistent for %s inferred %s provided %s' % (k, aux_shape_dict[k], aux_params[k].shape)
@@ -92,4 +98,11 @@ def get_fixed_params(symbol, fixed_param_prefix=''):
             for prefix in fixed_param_prefix:
                 if prefix in name:
                     fixed_param_names.append(name)
+    return fixed_param_names
+
+
+def get_all_params(symbol):
+    fixed_param_names = []
+    for name in symbol.list_arguments():
+        fixed_param_names.append(name)
     return fixed_param_names

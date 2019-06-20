@@ -7,7 +7,7 @@ from mxnet.module import Module
 
 from symdata.loader import AnchorGenerator, AnchorSampler, AnchorLoader
 from symnet.logger import logger
-from symnet.model import load_param, infer_data_shape, check_shape, initialize_frcnn, get_fixed_params
+from symnet.model import load_param, infer_data_shape, check_shape, initialize_frcnn, get_fixed_params, get_all_params
 from symnet.metric import *
 
 import os
@@ -72,6 +72,15 @@ def train_net(sym, roidb, args):
 
     # check fixed params
     fixed_param_names = get_fixed_params(sym, args.net_fixed_params)
+    # fixed_param_names = get_all_params(sym)
+    # fixed_param_names.remove('fullyconnected0_weight')
+    # fixed_param_names.remove('fullyconnected0_bias')
+    # fixed_param_names.remove('fullyconnected1_weight')
+    # fixed_param_names.remove('fullyconnected1_bias')
+    # fixed_param_names.remove('cls_score_weight')
+    # fixed_param_names.remove('bbox_pred_weight')
+    # fixed_param_names.remove('cls_score_bias')
+    # fixed_param_names.remove('bbox_pred_bias')
     logger.info('locking params\n%s' % pprint.pformat(fixed_param_names))
 
     # metric

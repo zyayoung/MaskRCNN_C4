@@ -23,8 +23,7 @@ class MaskOutputOperator(mx.operator.CustomOp):
         assert len(in_data) == 4
         assert len(out_data) == 1
         mask_prob, mask_target, mask_weight, label = in_data
-        n_rois_fg = np.where(mask_weight.asnumpy()>0)[0].shape[0] + 1e-14
-        # print(n_rois_fg)
+        n_rois_fg = np.where(label.asnumpy()>0)[0].shape[0]
         grad = self.factor*mask_weight*(mask_prob - mask_target)/float(n_rois_fg) # only fg rois contribute to grad
         self.assign(in_grad[0], req[0], mx.nd.array(grad))
 

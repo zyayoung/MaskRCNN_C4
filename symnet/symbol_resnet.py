@@ -158,13 +158,19 @@ def get_resnet_train(anchor_scales, anchor_ratios, rpn_feature_stride,
                                    label=label, name="mask_output", op_type='MaskOutput')
     
     pool1 = mx.symbol.Pooling(data=top_feat, global_pool=True, kernel=(7, 7), pool_type='avg', name='pool1')
+    flatten = mx.symbol.Flatten(data=pool1, name="flatten")
+    fc6 = mx.symbol.FullyConnected(data=flatten, num_hidden=1024)
+    relu6 = mx.symbol.Activation(data=fc6, act_type="relu", name="rcnn_relu6")
+    drop6 = mx.symbol.Dropout(data=relu6, p=0.5, name="drop6")
+    fc7 = mx.symbol.FullyConnected(data=drop6, num_hidden=1024)
+    relu7 = mx.symbol.Activation(data=fc7, act_type="relu", name="rcnn_relu7")
 
     # rcnn classification
-    cls_score = mx.symbol.FullyConnected(name='cls_score', data=pool1, num_hidden=num_classes)
+    cls_score = mx.symbol.FullyConnected(name='cls_score', data=relu7, num_hidden=num_classes)
     cls_prob = mx.symbol.SoftmaxOutput(name='cls_prob', data=cls_score, label=label, normalization='batch')
 
     # rcnn bbox regression
-    bbox_pred = mx.symbol.FullyConnected(name='bbox_pred', data=top_feat, num_hidden=num_classes * 4)
+    bbox_pred = mx.symbol.FullyConnected(name='bbox_pred', data=relu7, num_hidden=num_classes * 4)
     bbox_loss_ = bbox_weight * mx.symbol.smooth_l1(name='bbox_loss_', scalar=1.0, data=(bbox_pred - bbox_target))
     bbox_loss = mx.sym.MakeLoss(name='bbox_loss', data=bbox_loss_, grad_scale=1.0 / rcnn_batch_rois)
 
@@ -225,22 +231,22 @@ def get_resnet_test(anchor_scales, anchor_ratios, rpn_feature_stride,
 
     
     mask_deconv1 = mx.symbol.Deconvolution(data=top_feat, kernel=(2, 2), stride=(2, 2), num_filter=256,
-                                            name="mask_deconv1")
+                                        name="mask_deconv1")
     mask_relu1 = mx.symbol.Activation(data=mask_deconv1, act_type="relu", name="mask_relu1")
     mask_conv_tmp = mx.symbol.Convolution(data=mask_relu1, kernel=(3, 3), num_filter=256, pad=(1, 1),
-                                          name="mask_conv_t1")
+                                        name="mask_conv_t1")
     mask_conv_tmp = mx.symbol.Activation(data=mask_conv_tmp, act_type="relu")
     mask_conv_tmp = mx.symbol.Convolution(data=mask_conv_tmp, kernel=(3, 3), num_filter=256, pad=(1, 1),
-                                          name="mask_conv_t2")
+                                        name="mask_conv_t2")
     mask_conv_tmp = mx.symbol.Activation(data=mask_conv_tmp, act_type="relu")
     mask_conv_tmp = mx.symbol.Convolution(data=mask_conv_tmp, kernel=(3, 3), num_filter=256, pad=(1, 1),
-                                          name="mask_conv_t3")
+                                        name="mask_conv_t3")
     mask_conv_tmp = mx.symbol.Activation(data=mask_conv_tmp, act_type="relu")
     mask_conv_tmp = mx.symbol.Convolution(data=mask_conv_tmp, kernel=(3, 3), num_filter=256, pad=(1, 1),
-                                          name="mask_conv_t4")
+                                        name="mask_conv_t4")
     mask_conv_tmp = mx.symbol.Activation(data=mask_conv_tmp, act_type="relu")
     mask_deconv2 = mx.symbol.Deconvolution(data=mask_conv_tmp, kernel=(2, 2), stride=(2, 2), num_filter=256,
-                                            name="mask_deconv2") 
+                                        name="mask_deconv2")
     mask_relu2 = mx.symbol.Activation(data=mask_deconv2, act_type="relu")
     mask_conv2 = mx.symbol.Convolution(data=mask_relu1, kernel=(1, 1), num_filter=num_classes,
                                           name="mask_conv2")

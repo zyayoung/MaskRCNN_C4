@@ -32,7 +32,7 @@ def get_image(roi_rec, short, max_size, mean, std):
         gt_boxes = np.empty((0, 5), dtype=np.float32)
     
     im_seg = Image.open(roi_rec['ins_seg'])
-    im_seg = im_seg.resize((width, height), Image.BILINEAR)
+    im_seg = im_seg.resize((width, height), Image.NEAREST)
     pixel = list(im_seg.getdata())
     im_seg = np.array(pixel).reshape([im_seg.size[1], im_seg.size[0]])
     # print(im_seg.shape)
