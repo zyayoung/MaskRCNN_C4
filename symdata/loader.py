@@ -201,6 +201,7 @@ class AnchorLoader(mx.io.DataIter):
     def getdata(self):
         indices = self.getindex()
         short_side = np.random.randint(800, 1025)
+        # short_side = 1024
         im_tensor, im_info, gt_boxes, seg = [], [], [], []
         for index in indices:
             roi_rec = self._roidb[index]
@@ -218,12 +219,14 @@ class AnchorLoader(mx.io.DataIter):
         return self._data
 
     def getlabel(self):
+        # t = time.clock()
         im_tensor, im_info, gt_boxes, seg = self._data
 
         # all stacked image share same anchors
         _, out_shape, _ = self._feat_sym.infer_shape(data=im_tensor.shape)
         feat_height, feat_width = out_shape[0][-2:]
         anchors = self._ag.generate(feat_height, feat_width)
+        # print(time.clock() - t)
 
         # assign anchor according to their real size encoded in im_info
         label, bbox_target, bbox_weight = [], [], []

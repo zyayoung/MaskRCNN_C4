@@ -198,12 +198,12 @@ class Cityscape(IMDB):
                 for i in range(len(dets)):
                     bbox = dets[i, :4]
                     bbox = np.int32(bbox)
-                    bbox[bbox<0] = 0
-                    # print(bbox, im_info)
-                    bbox[1] = min(bbox[1], im_info[0])
-                    bbox[3] = min(bbox[3], im_info[0])
-                    bbox[2] = min(bbox[2], im_info[1])
-                    bbox[0] = min(bbox[0], im_info[1])
+                    # bbox[bbox<0] = 0
+                    # # print(bbox, im_info)
+                    # bbox[1] = min(bbox[1], im_info[0])
+                    # bbox[3] = min(bbox[3], im_info[0])
+                    # bbox[2] = min(bbox[2], im_info[1])
+                    # bbox[0] = min(bbox[0], im_info[1])
                     score = dets[i, -1]
                     mask_image = np.zeros((int(im_info[0]), int(im_info[1])))
                     if int(bbox[2] - bbox[0]) * int(bbox[3] - bbox[1]) == 0:

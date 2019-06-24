@@ -165,7 +165,7 @@ def parse_args():
     parser.add_argument('--rpn-nms-thresh', type=float, default=0.7)
     parser.add_argument('--rpn-min-size', type=int, default=16)
     parser.add_argument('--rpn-batch-rois', type=int, default=256)
-    parser.add_argument('--rpn-allowed-border', type=int, default=0)
+    parser.add_argument('--rpn-allowed-border', type=int, default=1000)
     parser.add_argument('--rpn-fg-fraction', type=float, default=0.5)
     parser.add_argument('--rpn-fg-overlap', type=float, default=0.7)
     parser.add_argument('--rpn-bg-overlap', type=float, default=0.3)
