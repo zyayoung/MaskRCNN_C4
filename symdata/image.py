@@ -33,8 +33,8 @@ def get_image(roi_rec, short, max_size, mean, std):
     
     im_seg = Image.open(roi_rec['ins_seg'])
     im_seg = im_seg.resize((width, height), Image.NEAREST)
-    pixel = list(im_seg.getdata())
-    im_seg = np.array(pixel).reshape([im_seg.size[1], im_seg.size[0]])
+    pixel = np.round(list(im_seg.getdata()))
+    im_seg = np.array(pixel, dtype=np.uint32).reshape([im_seg.size[1], im_seg.size[0]])
     # print(im_seg.shape)
     if roi_rec["flipped"]:
         im_seg = im_seg[:, ::-1]

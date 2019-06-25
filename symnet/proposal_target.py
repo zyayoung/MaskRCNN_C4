@@ -10,13 +10,25 @@ import math
 import time
 import threading as td
 from queue import Queue
+from cython.mask import compute_mask_and_label_single_cython
 
 from symdata.bbox import bbox_overlaps, bbox_transform
 
-def compute_mask_and_label_single(roi, label, ins_seg, q, n):
+def compute_mask_and_label_single_cp(roi, label, ins_seg, q, n):
+    mask, label = compute_mask_and_label_single_cython(roi, label, ins_seg)
+    # print(mask, label)
+    if label:
+        mask = np.array(mask, dtype=np.float)
+        mask = cv2.resize(mask, (14, 14), interpolation=cv2.INTER_LINEAR)
+    else:
+        mask = np.zeros((14, 14))
+
+    q.put((n, mask, label))
+    # del mask
+    # del label
+
+def compute_mask_and_label_single_py(roi, label, ins_seg, q, n):
     class_id = [0, 24, 25, 26, 27, 28, 31, 32, 33]
-    # ins_seg = ins_seg[::2,::2]
-    # roi /= 2
     target = ins_seg[int(roi[1]): int(roi[3]), int(roi[0]): int(roi[2])]
     # print(target.shape)
     ids = np.unique(target)
@@ -64,7 +76,7 @@ def compute_mask_and_label(ex_rois, ex_labels, seg, flipped=False):
     # im = Image.open(seg_gt)
     # pixel = list(im.getdata())
     # pixel = np.array(pixel).reshape([im.size[1], im.size[0]])
-    ins_seg = seg
+    # seg = np.int32(seg)
     # print(ins_seg.shape)
     rois = ex_rois[:,1:]
     # print(rois)
@@ -76,13 +88,23 @@ def compute_mask_and_label(ex_rois, ex_labels, seg, flipped=False):
     q = Queue()
     t_list = []
     for n in range(n_rois):
-        t = td.Thread(target=compute_mask_and_label_single, args=(rois[n], label[n], seg, q, n))
+        t = td.Thread(target=compute_mask_and_label_single_py, args=(rois[n], label[n], seg, q, n))
         t.start()
         t_list.append(t)
     for t in t_list:
         t.join()
         n, _mask, _label = q.get()
-
+        # t.kill()
+        del t
+        mask_target[n] = _mask
+        mask_label[n] = _label
+    # for n in range(n_rois):
+    #     _mask, _label = compute_mask_and_label_single_cython(rois[n], label[n], seg)
+    #     if _label:
+    #         _mask = np.array(_mask, dtype=np.float)
+    #         _mask = cv2.resize(_mask, (14, 14), interpolation=cv2.INTER_LINEAR)
+    #     else:
+    #         _mask = np.zeros((14, 14))
         mask_target[n] = _mask
         mask_label[n] = _label
     return mask_target, mask_label
