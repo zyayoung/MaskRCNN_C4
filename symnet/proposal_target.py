@@ -29,7 +29,8 @@ def compute_mask_and_label_single_cp(roi, label, ins_seg, q, n):
 
 def compute_mask_and_label_single_py(roi, label, ins_seg, q, n):
     class_id = [0, 24, 25, 26, 27, 28, 31, 32, 33]
-    target = ins_seg[int(roi[1]): int(roi[3]), int(roi[0]): int(roi[2])]
+    # print(roi)
+    target = ins_seg[int(0.5+roi[1]): int(0.5+roi[3]), int(0.5+roi[0]): int(0.5+roi[2])]
     # print(target.shape)
     ids = np.unique(target)
     ins_id = 0
@@ -59,19 +60,18 @@ def compute_mask_and_label_single_py(roi, label, ins_seg, q, n):
                 max_count = iou
 
     if max_count == 0:
-        q.put((n, np.zeros((14, 14)), 0))
+        q.put((n, np.zeros((14, 14), dtype=np.float32), 0))
 
     else:
         # print max_count
-        mask = np.zeros(target.shape)
+        mask = np.zeros(target.shape, dtype=np.float32)
         idx = np.where(target == ins_id)
         mask[idx] = 1
-        # cv2.imwrite('tmp/mask_train{}_{}_{}.jpg'.format(n, id, np.random.randint(1000)), mask*255)
         mask = cv2.resize(mask, (14, 14), interpolation=cv2.INTER_LINEAR)
 
         q.put((n, mask, label))
 
-def compute_mask_and_label(ex_rois, ex_labels, seg, flipped=False):
+def compute_mask_and_label(ex_rois, ex_labels, seg):
     # assert os.path.exists(seg_gt), 'Path does not exist: {}'.format(seg_gt)
     # im = Image.open(seg_gt)
     # pixel = list(im.getdata())
@@ -83,8 +83,8 @@ def compute_mask_and_label(ex_rois, ex_labels, seg, flipped=False):
     n_rois = ex_rois.shape[0]
     label = ex_labels
     class_id = [0, 24, 25, 26, 27, 28, 31, 32, 33]
-    mask_target = np.zeros((n_rois, 14, 14), dtype=np.int8)
-    mask_label = np.zeros((n_rois), dtype=np.int8)
+    mask_target = np.zeros((n_rois, 14, 14), dtype=np.float32)
+    mask_label = np.zeros((n_rois), dtype=np.uint8)
     q = Queue()
     t_list = []
     for n in range(n_rois):
@@ -105,12 +105,12 @@ def compute_mask_and_label(ex_rois, ex_labels, seg, flipped=False):
     #         _mask = cv2.resize(_mask, (14, 14), interpolation=cv2.INTER_LINEAR)
     #     else:
     #         _mask = np.zeros((14, 14))
-        mask_target[n] = _mask
-        mask_label[n] = _label
+        # mask_target[n] = _mask
+        # mask_label[n] = _label
     return mask_target, mask_label
 
 
-def sample_rois(rois, gt_boxes, num_classes, rois_per_image, fg_rois_per_image, fg_overlap, box_stds, seg):
+def sample_rois(rois, gt_boxes, num_classes, rois_per_image, fg_rois_per_image, fg_overlap, box_stds, seg, im_info):
     """
     generate random sample of ROIs comprising foreground and background examples
     :param rois: [n, 5] (batch_index, x1, y1, x2, y2)
@@ -158,33 +158,15 @@ def sample_rois(rois, gt_boxes, num_classes, rois_per_image, fg_rois_per_image, 
     # set labels of bg rois to be 0
     labels[fg_rois_this_image:] = 0
 
-    mask_targets = np.zeros((rois_per_image, num_classes, 14, 14), dtype=np.int8)
-    mask_weights = np.zeros((rois_per_image, num_classes, 1, 1), dtype=np.int8)
-    # print(seg.shape)
-    # t = time.clock()
-    # print('#', end='', flush=True)
+    mask_targets = np.zeros((rois_per_image, num_classes, 14, 14), dtype=np.float32)
+    mask_weights = np.zeros((rois_per_image, num_classes, 1, 1), dtype=np.float32)
+    # print(im_info[2])
     _mask_targets, _mask_labels = compute_mask_and_label(rois[:fg_rois_this_image], labels[:fg_rois_this_image], seg)
-    # print(time.clock()-t)
-    # rand = np.random.randint(1000000)
-    # im = cv2.cvtColor(seg, cv2.COLOR_GRAY2BGR)
     for i in range(fg_rois_this_image):
-        mask_targets[i, _mask_labels[i]] = _mask_targets[i]
-        mask_weights[i, _mask_labels[i]] = 1
-    #     cv2.imwrite("tmp/{}_{}_{}.jpg".format(rand, _mask_labels[i], i), np.uint8(_mask_targets[i]*255))
-        # if _mask_labels[i]!=labels[i]:
-        #     roi = rois[i]
-        #     cv2.rectangle(im, (int(roi[1]), int(roi[2])), (int(roi[3]), int(roi[4])), (20, 0, 0))
-        # else:
-        #     roi = rois[i]
-        #     cv2.rectangle(im, (int(roi[1]), int(roi[2])), (int(roi[3]), int(roi[4])), (0, 20, 0))
-    # print(np.unique(im))
-    # cv2.imwrite('tmp/{}_im.jpg'.format(rand), im*7)
-    # print(mask_weights[:,:,0,0], _mask_labels)
-
-    # roi_idx = _mask_labels.argmax()
-    # sample = mask_targets[roi_idx, _mask_labels[roi_idx]]
-    # print(_mask_labels)
-
+        if _mask_labels[i]:
+            mask_targets[i, _mask_labels[i]] = _mask_targets[i]
+            # print(mask_targets[i, _mask_labels[i]])
+            mask_weights[i, _mask_labels[i]] = 1
     # load or compute bbox_target
     targets = bbox_transform(rois[:, 1:], gt_boxes[gt_assignment[keep_indexes], :4], box_stds=box_stds)
     bbox_targets = np.zeros((rois_per_image, 4 * num_classes), dtype=np.float32)
@@ -214,6 +196,7 @@ class ProposalTargetOperator(mx.operator.CustomOp):
         all_rois = in_data[0].asnumpy()
         all_gt_boxes = in_data[1].asnumpy()
         all_segs = in_data[2].asnumpy()
+        all_im_info = in_data[3].asnumpy()
         # print(all_segs.shape)
 
         rois = np.empty((0, 5), dtype=np.float32)
@@ -227,6 +210,7 @@ class ProposalTargetOperator(mx.operator.CustomOp):
             b_gt_boxes = all_gt_boxes[batch_idx]
             b_gt_boxes = b_gt_boxes[np.where(b_gt_boxes[:, -1] > 0)[0]]
             b_segs = all_segs[batch_idx]
+            b_im_info = all_im_info[batch_idx]
 
             # Include ground-truth boxes in the set of candidate rois
             batch_pad = batch_idx * np.ones((b_gt_boxes.shape[0], 1), dtype=b_gt_boxes.dtype)
@@ -234,7 +218,7 @@ class ProposalTargetOperator(mx.operator.CustomOp):
 
             b_rois, b_labels, b_bbox_targets, b_bbox_weights, b_mask_targets, b_mask_weights = \
                 sample_rois(b_rois, b_gt_boxes, num_classes=self._num_classes, rois_per_image=self._rois_per_image,
-                            fg_rois_per_image=self._fg_rois_per_image, fg_overlap=self._fg_overlap, box_stds=self._box_stds, seg=b_segs)
+                            fg_rois_per_image=self._fg_rois_per_image, fg_overlap=self._fg_overlap, box_stds=self._box_stds, seg=b_segs, im_info=b_im_info)
 
             rois = np.vstack((rois, b_rois))
             labels = np.hstack((labels, b_labels))
@@ -269,7 +253,7 @@ class ProposalTargetProp(mx.operator.CustomOpProp):
         self._box_stds = tuple(np.fromstring(box_stds[1:-1], dtype=float, sep=','))
 
     def list_arguments(self):
-        return ['rois', 'gt_boxes', 'seg']
+        return ['rois', 'gt_boxes', 'seg', 'im_info']
 
     def list_outputs(self):
         return ['rois_output', 'label', 'bbox_target', 'bbox_weight', 'mask_targets', 'mask_weights']
@@ -281,6 +265,7 @@ class ProposalTargetProp(mx.operator.CustomOpProp):
         rpn_rois_shape = in_shape[0]
         gt_boxes_shape = in_shape[1]
         seg_shape = in_shape[2]
+        im_info_shape = in_shape[3]
 
         output_rois_shape = (self._batch_rois, 5)
         label_shape = (self._batch_rois, )
@@ -289,7 +274,7 @@ class ProposalTargetProp(mx.operator.CustomOpProp):
         mask_target_shape = (self._batch_rois, self._num_classes, 14, 14)
         mask_weight_shape = (self._batch_rois, self._num_classes, 1, 1)
 
-        return [rpn_rois_shape, gt_boxes_shape, seg_shape], \
+        return [rpn_rois_shape, gt_boxes_shape, seg_shape, im_info_shape], \
                [output_rois_shape, label_shape, bbox_target_shape, bbox_weight_shape, mask_target_shape, mask_weight_shape]
 
     def create_operator(self, ctx, shapes, dtypes):

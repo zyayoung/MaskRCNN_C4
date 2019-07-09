@@ -25,7 +25,7 @@ def residual_unit(data, num_filter, stride, dim_match, name):
         shortcut = mx.sym.Convolution(data=act1, num_filter=num_filter, kernel=(1, 1), stride=stride, no_bias=True,
                                       workspace=workspace, name=name + '_sc')
     sum = mx.sym.ElementWiseSum(*[conv3, shortcut], name=name + '_plus')
-    return sum
+    return mx.sym.Activation(data=sum, act_type='relu', name=name + '_relu4')
 
 
 def get_resnet_feature(data, units, filter_list):
@@ -61,7 +61,7 @@ def get_resnet_top_feature(data, units, filter_list):
 
     bn1 = mx.sym.BatchNorm(data=unit, fix_gamma=False, eps=eps, use_global_stats=use_global_stats, name='bn1')
     relu1 = mx.sym.Activation(data=bn1, act_type='relu', name='relu1')
-    return relu1
+    return unit
 
 
 def get_resnet_train(anchor_scales, anchor_ratios, rpn_feature_stride,
@@ -114,7 +114,7 @@ def get_resnet_train(anchor_scales, anchor_ratios, rpn_feature_stride,
         threshold=rpn_nms_thresh, rpn_min_size=rpn_min_size)
 
     # rcnn roi proposal target
-    group = mx.symbol.Custom(rois=rois, gt_boxes=gt_boxes, seg=seg, op_type='proposal_target',
+    group = mx.symbol.Custom(rois=rois, gt_boxes=gt_boxes, seg=seg, im_info=im_info, op_type='proposal_target',
                              num_classes=num_classes, batch_images=rcnn_batch_size,
                              batch_rois=rcnn_batch_rois, fg_fraction=rcnn_fg_fraction,
                              fg_overlap=rcnn_fg_overlap, box_stds=rcnn_bbox_stds)
@@ -161,16 +161,16 @@ def get_resnet_train(anchor_scales, anchor_ratios, rpn_feature_stride,
     flatten = mx.symbol.Flatten(data=pool1, name="flatten")
     fc6 = mx.symbol.FullyConnected(data=flatten, num_hidden=1024)
     relu6 = mx.symbol.Activation(data=fc6, act_type="relu", name="rcnn_relu6")
-    drop6 = mx.symbol.Dropout(data=relu6, p=0.5, name="drop6")
-    fc7 = mx.symbol.FullyConnected(data=drop6, num_hidden=1024)
+    # drop6 = mx.symbol.Dropout(data=relu6, p=0.5, name="drop6")
+    fc7 = mx.symbol.FullyConnected(data=relu6, num_hidden=1024)
     relu7 = mx.symbol.Activation(data=fc7, act_type="relu", name="rcnn_relu7")
 
     # rcnn classification
-    cls_score = mx.symbol.FullyConnected(name='cls_score', data=relu7, num_hidden=num_classes)
+    cls_score = mx.symbol.FullyConnected(name='cls_score', data=flatten, num_hidden=num_classes)
     cls_prob = mx.symbol.SoftmaxOutput(name='cls_prob', data=cls_score, label=label, normalization='batch')
 
     # rcnn bbox regression
-    bbox_pred = mx.symbol.FullyConnected(name='bbox_pred', data=relu7, num_hidden=num_classes * 4)
+    bbox_pred = mx.symbol.FullyConnected(name='bbox_pred', data=flatten, num_hidden=num_classes * 4)
     bbox_loss_ = bbox_weight * mx.symbol.smooth_l1(name='bbox_loss_', scalar=1.0, data=(bbox_pred - bbox_target))
     bbox_loss = mx.sym.MakeLoss(name='bbox_loss', data=bbox_loss_, grad_scale=1.0 / rcnn_batch_rois)
 
@@ -256,16 +256,16 @@ def get_resnet_test(anchor_scales, anchor_ratios, rpn_feature_stride,
     flatten = mx.symbol.Flatten(data=pool1, name="flatten")
     fc6 = mx.symbol.FullyConnected(data=flatten, num_hidden=1024)
     relu6 = mx.symbol.Activation(data=fc6, act_type="relu", name="rcnn_relu6")
-    drop6 = mx.symbol.Dropout(data=relu6, p=0.5, name="drop6")
-    fc7 = mx.symbol.FullyConnected(data=drop6, num_hidden=1024)
+    # drop6 = mx.symbol.Dropout(data=relu6, p=0.5, name="drop6")
+    fc7 = mx.symbol.FullyConnected(data=relu6, num_hidden=1024)
     relu7 = mx.symbol.Activation(data=fc7, act_type="relu", name="rcnn_relu7")
 
     # rcnn classification
-    cls_score = mx.symbol.FullyConnected(name='cls_score', data=relu7, num_hidden=num_classes)
+    cls_score = mx.symbol.FullyConnected(name='cls_score', data=flatten, num_hidden=num_classes)
     cls_prob = mx.symbol.softmax(name='cls_prob', data=cls_score)
 
     # rcnn bbox regression
-    bbox_pred = mx.symbol.FullyConnected(name='bbox_pred', data=relu7, num_hidden=num_classes * 4)
+    bbox_pred = mx.symbol.FullyConnected(name='bbox_pred', data=flatten, num_hidden=num_classes * 4)
 
     # reshape output
     cls_prob = mx.symbol.Reshape(data=cls_prob, shape=(rcnn_batch_size, -1, num_classes), name='cls_prob_reshape')
