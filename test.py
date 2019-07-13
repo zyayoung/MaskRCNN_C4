@@ -52,6 +52,8 @@ def test_net(sym, imdb, args):
                  for _ in range(imdb.num_classes)]
     all_masks = [[[] for _ in range(imdb.num_images)]
                  for _ in range(imdb.num_classes)]
+    all_rois = [[[] for _ in range(imdb.num_images)]
+                 for _ in range(imdb.num_classes)]
 
     # start detection
     with tqdm(total=imdb.num_images) as pbar:
@@ -64,23 +66,26 @@ def test_net(sym, imdb, args):
             scores = scores[0]
             bbox_deltas = bbox_deltas[0]
 
-            det, masks = im_detect(rois, scores, bbox_deltas, mask_prob, im_info,
+            det, masks, rois_out = im_detect(rois, scores, bbox_deltas, mask_prob, im_info,
                             bbox_stds=args.rcnn_bbox_stds, nms_thresh=args.rcnn_nms_thresh,
                             conf_thresh=args.rcnn_conf_thresh)
             # print(det.shape, masks.shape)
             for j in range(1, imdb.num_classes):
                 indexes = np.where(det[:, 0] == j)[0]
                 all_boxes[j][i] = np.concatenate((det[:, -4:], det[:, [1]]), axis=-1)[indexes, :]
+                # print(type(masks), type(rois_out))
                 all_masks[j][i] = masks[indexes]
+                all_rois[j][i] = rois_out[indexes]
 
             boxes_this_image = [[]] + [all_boxes[cls_ind][i] for cls_ind in range(1, imdb.num_classes)]
             masks_this_image = [[]] + [all_masks[cls_ind][i] for cls_ind in range(1, imdb.num_classes)]
-            # print(boxes_this_image[1][:4])
+            rois_this_image = [[]] + [all_rois[cls_ind][i] for cls_ind in range(1, imdb.num_classes)]
             results_list.append({
                             'image': '{}.png'.format(i),
                             'im_info': im_info.asnumpy(),
                             'boxes': boxes_this_image,
-                            'masks': masks_this_image})
+                            'masks': masks_this_image,
+                            'rois': rois_this_image})
                             
             pbar.update(data_batch.data[0].shape[0])
 

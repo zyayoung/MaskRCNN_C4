@@ -178,6 +178,7 @@ class Cityscape(IMDB):
             im_info = result_rec['im_info']
             detections = result_rec['boxes']
             seg_masks = result_rec['masks']
+            roiss = result_rec['rois']
 
             filename = image_path.split("/")[-1]
             filename = filename.replace('.png', '')
@@ -195,8 +196,16 @@ class Cityscape(IMDB):
                     continue
                 dets = detections[j]
                 masks = seg_masks[j]
+                rois = roiss[j]
                 for i in range(len(dets)):
                     bbox = dets[i, :4]
+                    # roi = rois[i, :]
+                    # print(bbox, roi)
+                    # bbox[0] = max(bbox[0], roi[0])
+                    # bbox[1] = max(bbox[1], roi[1])
+                    # bbox[2] = min(bbox[2], roi[2])
+                    # bbox[3] = min(bbox[3], roi[3])
+                    # bbox = roi
                     bbox = np.int32(bbox+0.5)
                     score = dets[i, -1]
                     mask_image = np.zeros((int(im_info[0]), int(im_info[1])), dtype=np.uint8)

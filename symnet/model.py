@@ -13,9 +13,13 @@ def load_param(params, ctx=None):
         if tp == 'arg':
             # print(name, v.shape)
             arg_params[name] = v.as_in_context(ctx)
+            if name.startswith("stage4_unit"):
+                arg_params['mask_'+name] = v.as_in_context(ctx)
         if tp == 'aux':
             # print(name)
             aux_params[name] = v.as_in_context(ctx)
+            if name.startswith("stage4_unit"):
+                aux_params['mask_'+name] = v.as_in_context(ctx)
     return arg_params, aux_params
 
 

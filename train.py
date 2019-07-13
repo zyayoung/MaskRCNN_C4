@@ -106,7 +106,10 @@ def train_net(sym, roidb, args):
         eval_metrics.add(child_metric)
 
     # callback
-    batch_end_callback = [mx.callback.Speedometer(batch_size, frequent=args.log_interval, auto_reset=True), mx.contrib.tensorboard.LogMetricsCallback("logs")]
+    batch_end_callback = [
+        mx.callback.Speedometer(batch_size, frequent=args.log_interval, auto_reset=True),
+        mx.contrib.tensorboard.LogMetricsCallback("logs")
+    ]
     epoch_end_callback = mx.callback.do_checkpoint(args.save_prefix)
 
     # learning schedule

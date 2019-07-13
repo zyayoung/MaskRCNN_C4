@@ -131,6 +131,45 @@ def bbox_pred(boxes, box_deltas, box_stds):
 
     return pred_boxes
 
+def nonlinear_pred(boxes, box_deltas):
+    """
+    Transform the set of class-agnostic boxes into class-specific boxes
+    by applying the predicted offsets (box_deltas)
+    :param boxes: !important [N 4]
+    :param box_deltas: [N, 4 * num_classes]
+    :return: [N 4 * num_classes]
+    """
+    if boxes.shape[0] == 0:
+        return np.zeros((0, box_deltas.shape[1]))
+
+    boxes = boxes.astype(np.float, copy=False)
+    widths = boxes[:, 2] - boxes[:, 0] + 1.0
+    heights = boxes[:, 3] - boxes[:, 1] + 1.0
+    ctr_x = boxes[:, 0] + 0.5 * (widths - 1.0)
+    ctr_y = boxes[:, 1] + 0.5 * (heights - 1.0)
+
+    dx = box_deltas[:, 0::4]
+    dy = box_deltas[:, 1::4]
+    dw = box_deltas[:, 2::4]
+    dh = box_deltas[:, 3::4]
+
+    pred_ctr_x = dx * widths[:, np.newaxis] + ctr_x[:, np.newaxis]
+    pred_ctr_y = dy * heights[:, np.newaxis] + ctr_y[:, np.newaxis]
+    pred_w = np.exp(dw) * widths[:, np.newaxis]
+    pred_h = np.exp(dh) * heights[:, np.newaxis]
+
+    pred_boxes = np.zeros(box_deltas.shape)
+    # x1
+    pred_boxes[:, 0::4] = pred_ctr_x - 0.5 * (pred_w - 1.0)
+    # y1
+    pred_boxes[:, 1::4] = pred_ctr_y - 0.5 * (pred_h - 1.0)
+    # x2
+    pred_boxes[:, 2::4] = pred_ctr_x + 0.5 * (pred_w - 1.0)
+    # y2
+    pred_boxes[:, 3::4] = pred_ctr_y + 0.5 * (pred_h - 1.0)
+
+    return pred_boxes
+
 
 def nms(dets, thresh):
     """
@@ -190,19 +229,27 @@ def im_detect(rois, scores, bbox_deltas, mask_output, im_info,
     # convert to per class detection results
     det = []
     masks = []
+    rois_out = []
+    # if len(scores) <= 100:
+    #     conf_thresh = 0
+    # else:
+    #     conf_thresh = np.sort(scores)[-100]
     for j in range(1, scores.shape[-1]):
         indexes = np.where(scores[:, j] > conf_thresh)[0]
         cls_scores = scores[indexes, j, np.newaxis]
         cls_boxes = pred_boxes[indexes, j * 4:(j + 1) * 4]
         cls_dets = np.hstack((cls_boxes, cls_scores))
         cls_masks = mask_output[indexes, j, :, :]
+        cls_rois = rois[indexes, :]
         keep = cpu_nms(np.array(cls_dets, dtype=np.float32), np.float(nms_thresh))
 
         cls_id = np.ones_like(cls_scores) * j
         det.append(np.hstack((cls_id, cls_scores, cls_boxes))[keep, :])
         masks.append(cls_masks[keep])
+        rois_out.append(cls_rois[keep])
 
     # assemble all classes
     det = np.concatenate(det, axis=0)
     masks = np.concatenate(masks, axis=0)
-    return det, masks
+    rois_out = np.concatenate(rois_out, axis=0)
+    return det, masks, rois_out

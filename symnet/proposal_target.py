@@ -67,9 +67,21 @@ def compute_mask_and_label_single_py(roi, label, ins_seg, q, n):
         mask = np.zeros(target.shape, dtype=np.float32)
         idx = np.where(target == ins_id)
         mask[idx] = 1
-        mask = cv2.resize(mask, (14, 14), interpolation=cv2.INTER_LINEAR)
+        px = idx
+        x_min = np.min(px[1])
+        y_min = np.min(px[0])
+        x_max = np.max(px[1])
+        y_max = np.max(px[0])
+        if (x_max - x_min) * (y_max - y_min) > 0:
 
-        q.put((n, mask, label))
+            mask = mask[y_min:y_max, x_min:x_max]
+            mask = cv2.resize(mask, (14, 14), interpolation=cv2.INTER_LINEAR)
+        # print(mask[0,:].sum(),mask[13,:].sum(),mask[:,0].sum(),mask[:,13].sum())
+
+            q.put((n, mask, label))
+        else:
+            q.put((n, np.zeros((14, 14), dtype=np.float32), 0))
+
 
 def compute_mask_and_label(ex_rois, ex_labels, seg):
     # assert os.path.exists(seg_gt), 'Path does not exist: {}'.format(seg_gt)
