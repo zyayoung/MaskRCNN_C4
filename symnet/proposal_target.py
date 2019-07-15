@@ -99,26 +99,22 @@ def compute_mask_and_label(ex_rois, ex_labels, seg):
     mask_label = np.zeros((n_rois), dtype=np.uint8)
     q = Queue()
     t_list = []
+    # for n in range(n_rois):
+    #     t = td.Thread(target=compute_mask_and_label_single_py, args=(rois[n], label[n], seg, q, n))
+    #     t.start()
+    #     t_list.append(t)
+    # for t in t_list:
+    #     t.join()
+    #     n, _mask, _label = q.get()
+    #     # t.kill()
+    #     del t
+    #     mask_target[n] = _mask
+    #     mask_label[n] = _label
     for n in range(n_rois):
-        t = td.Thread(target=compute_mask_and_label_single_py, args=(rois[n], label[n], seg, q, n))
-        t.start()
-        t_list.append(t)
-    for t in t_list:
-        t.join()
-        n, _mask, _label = q.get()
-        # t.kill()
-        del t
+        compute_mask_and_label_single_py(rois[n], label[n], seg, q, n)
+        _, _mask, _label = q.get()
         mask_target[n] = _mask
         mask_label[n] = _label
-    # for n in range(n_rois):
-    #     _mask, _label = compute_mask_and_label_single_cython(rois[n], label[n], seg)
-    #     if _label:
-    #         _mask = np.array(_mask, dtype=np.float)
-    #         _mask = cv2.resize(_mask, (14, 14), interpolation=cv2.INTER_LINEAR)
-    #     else:
-    #         _mask = np.zeros((14, 14))
-        # mask_target[n] = _mask
-        # mask_label[n] = _label
     return mask_target, mask_label
 
 
