@@ -35,7 +35,8 @@ def compute_mask_and_label_single_py(roi, label, ins_seg, q, n):
     ids = np.unique(target)
     ins_id = 0
     max_count = 0
-    ids = ids[np.floor(ids / 1000) == class_id[int(label)]]
+    # ids = ids[np.floor(ids / 1000) == class_id[int(label)]]
+    ids = ids[np.floor(ids / 1000) == int(label)]
     if len(ids) == 1:
         ins_id = ids[0]
         max_count = 1

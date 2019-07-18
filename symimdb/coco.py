@@ -39,6 +39,7 @@ class coco(IMDB):
         self._anno_file = os.path.join(data_path, 'annotations', 'instances_' + image_set + '.json')
         # example train2017/000000119993.jpg
         self._image_file_tmpl = os.path.join(data_path, image_set, '{}')
+        self._seg_file_tmpl = os.path.join(data_path, image_set, 'cache', '{}.npz')
         # example detections_val2017_results.json
         self._result_file = os.path.join(data_path, 'detections_{}_results.json'.format(image_set))
         # get roidb
@@ -71,6 +72,8 @@ class coco(IMDB):
         """
         im_ann = _coco.loadImgs(index)[0]
         filename = self._image_file_tmpl.format(im_ann['file_name'])
+        pixel = self._seg_file_tmpl.format(index)
+        assert os.path.exists(pixel)
         width = im_ann['width']
         height = im_ann['height']
 
@@ -104,6 +107,7 @@ class coco(IMDB):
                    'width': width,
                    'boxes': boxes,
                    'gt_classes': gt_classes,
+                   'ins_seg': pixel,
                    'flipped': False}
         return roi_rec
 
