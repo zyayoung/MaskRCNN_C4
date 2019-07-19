@@ -45,8 +45,8 @@ def worker(index):
         os.path.join(cache_dir, "{}".format(index)),
         mask,
     )
-    pbar.update()
+    pbar.update(8)
 
 import multiprocessing as mp
-pool = mp.Pool(process=8)
-pool.map(worker, index)
+pool = mp.Pool(processes=8)
+pool.map(worker, image_ids)

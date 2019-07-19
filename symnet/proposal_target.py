@@ -95,27 +95,26 @@ def compute_mask_and_label(ex_rois, ex_labels, seg):
     # print(rois)
     n_rois = ex_rois.shape[0]
     label = ex_labels
-    class_id = [0, 24, 25, 26, 27, 28, 31, 32, 33]
     mask_target = np.zeros((n_rois, 14, 14), dtype=np.float32)
     mask_label = np.zeros((n_rois), dtype=np.uint8)
     q = Queue()
     t_list = []
-    # for n in range(n_rois):
-    #     t = td.Thread(target=compute_mask_and_label_single_py, args=(rois[n], label[n], seg, q, n))
-    #     t.start()
-    #     t_list.append(t)
-    # for t in t_list:
-    #     t.join()
-    #     n, _mask, _label = q.get()
-    #     # t.kill()
-    #     del t
-    #     mask_target[n] = _mask
-    #     mask_label[n] = _label
     for n in range(n_rois):
-        compute_mask_and_label_single_py(rois[n], label[n], seg, q, n)
-        _, _mask, _label = q.get()
+        t = td.Thread(target=compute_mask_and_label_single_py, args=(rois[n], label[n], seg, q, n))
+        t.start()
+        t_list.append(t)
+    for t in t_list:
+        t.join()
+        n, _mask, _label = q.get()
+        # t.kill()
+        del t
         mask_target[n] = _mask
         mask_label[n] = _label
+    # for n in range(n_rois):
+    #     compute_mask_and_label_single_py(rois[n], label[n], seg, q, n)
+    #     _, _mask, _label = q.get()
+    #     mask_target[n] = _mask
+    #     mask_label[n] = _label
     return mask_target, mask_label
 
 
