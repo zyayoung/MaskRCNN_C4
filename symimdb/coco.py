@@ -1,7 +1,9 @@
 import os
 import json
+import simplejson
 import numpy as np
 from builtins import range
+import pickle
 
 from symnet.logger import logger
 from .imdb import IMDB
@@ -10,6 +12,37 @@ from .imdb import IMDB
 from pycocotools.coco import COCO
 from pycocotools.cocoeval import COCOeval
 
+from symdata.bbox import clip_boxes
+from symdata.mask_voc2coco import mask_voc2coco
+
+import multiprocessing as mp
+from tqdm import tqdm
+
+def coco_results_one_category_kernel(data_pack):
+    cat_id = data_pack['cat_id']
+    all_im_info = data_pack['all_im_info']
+    boxes = data_pack['boxes']
+    masks = data_pack['masks']
+    cat_results = []
+    for im_ind, im_info in enumerate(all_im_info):
+        index = im_info['index']
+        try:
+            dets = boxes[im_ind].astype(np.float)
+        except:
+            dets = boxes[im_ind]
+        if len(dets) == 0:
+            continue
+        scores = dets[:, -1]
+        width = im_info['width']
+        height = im_info['height']
+        dets[:, :4] = clip_boxes(dets[:, :4], [height, width])
+        mask_encode = mask_voc2coco(masks[im_ind], dets[:, :4], height, width, 0.5)
+        result = [{'image_id': index,
+                    'category_id': cat_id,
+                    'segmentation': mask_encode[k],
+                    'score': scores[k]} for k in range(len(mask_encode))]
+        cat_results.extend(result)
+    return cat_results
 
 class coco(IMDB):
     classes = ['__background__',  # always index 0
@@ -111,10 +144,15 @@ class coco(IMDB):
                    'flipped': False}
         return roi_rec
 
+    def evaluate_mask(self, detections):
+        return self._evaluate_detections(detections)
+
     def _evaluate_detections(self, detections, **kargs):
         _coco = COCO(self._anno_file)
+        """ detections_val2014_results.json """
         self._write_coco_results(_coco, detections)
-        self._do_python_eval(_coco)
+        info_str = self._do_python_eval(_coco)
+        return info_str
 
     def _write_coco_results(self, _coco, detections):
         """ example results
@@ -123,18 +161,39 @@ class coco(IMDB):
           "bbox": [258.15,41.29,348.26,243.78],
           "score": 0.236}, ...]
         """
+        img_ids = _coco.getImgIds()
         cats = [cat['name'] for cat in _coco.loadCats(_coco.getCatIds())]
-        class_to_coco_ind = dict(zip(cats, _coco.getCatIds()))
-        results = []
+        _class_to_coco_ind = dict(zip(cats, _coco.getCatIds()))
+        all_im_info = [{'index': index,
+                        'height': _coco.loadImgs(index)[0]['height'],
+                        'width': _coco.loadImgs(index)[0]['width']}
+                        for index in img_ids]
+        data_pack = []
         for cls_ind, cls in enumerate(self.classes):
-            if cls == '__background__':
-                continue
-            logger.info('collecting %s results (%d/%d)' % (cls, cls_ind, self.num_classes - 1))
-            coco_cat_id = class_to_coco_ind[cls]
-            results.extend(self._coco_results_one_category(detections[cls_ind], coco_cat_id))
-        logger.info('writing results json to %s' % self._result_file)
+            if cls != '__background__':
+                data_pack.append({'cat_id': _class_to_coco_ind[cls],
+                        'cls_ind': cls_ind,
+                        'cls': cls,
+                        'all_im_info': all_im_info,
+                        'boxes': detections['all_boxes'][cls_ind],
+                        'masks': detections['all_masks'][cls_ind]}
+                )
+        # results = coco_results_one_category_kernel(data_pack[1])
+        # print results[0]
+        # pool = mp.Pool(processes=mp.cpu_count())
+        # results = pool.map(coco_results_one_category_kernel, data_pack)
+        # pool.close()
+        # pool.join()
+        # results = map(coco_results_one_category_kernel, data_pack)
+        results = []
+        with tqdm(total=len(data_pack)) as pbar:
+            for data in data_pack:
+                results.append(coco_results_one_category_kernel(data))
+                pbar.update(1)
+        results = sum(results, [])
+        print('Writing results json to %s' % self._result_file)
         with open(self._result_file, 'w') as f:
-            json.dump(results, f, sort_keys=True, indent=4)
+            simplejson.dump(results, f, sort_keys=True, indent=4)
 
     def _coco_results_one_category(self, boxes, cat_id):
         results = []
@@ -158,12 +217,22 @@ class coco(IMDB):
     def _do_python_eval(self, _coco):
         coco_dt = _coco.loadRes(self._result_file)
         coco_eval = COCOeval(_coco, coco_dt)
-        coco_eval.params.useSegm = False
+        coco_eval.params.useSegm = True
         coco_eval.evaluate()
         coco_eval.accumulate()
-        self._print_detection_metrics(coco_eval)
+        info_str = self._print_detection_metrics(coco_eval)
+
+        if not os.path.exists('results'):
+            os.mkdir('results')
+        eval_file = os.path.join('results', 'detections_%s_results.pkl' % self.name)
+        with open(eval_file, 'wb') as f:
+            pickle.dump(coco_eval, f, pickle.HIGHEST_PROTOCOL)
+        print('coco eval results saved to %s' % eval_file)
+        info_str += 'coco eval results saved to %s\n' % eval_file
+        return info_str
 
     def _print_detection_metrics(self, coco_eval):
+        info_str = ''
         IoU_lo_thresh = 0.5
         IoU_hi_thresh = 0.95
 
@@ -184,7 +253,9 @@ class coco(IMDB):
             coco_eval.eval['precision'][ind_lo:(ind_hi + 1), :, :, 0, 2]
         ap_default = np.mean(precision[precision > -1])
         logger.info('~~~~ Mean and per-category AP @ IoU=%.2f,%.2f] ~~~~' % (IoU_lo_thresh, IoU_hi_thresh))
+        info_str += '~~~~ Mean and per-category AP @ IoU=%.2f,%.2f] ~~~~\n' % (IoU_lo_thresh, IoU_hi_thresh)
         logger.info('%-15s %5.1f' % ('all', 100 * ap_default))
+        info_str += '%-15s %5.1f\n' % ('all', 100 * ap_default)
         for cls_ind, cls in enumerate(self.classes):
             if cls == '__background__':
                 continue
@@ -192,6 +263,9 @@ class coco(IMDB):
             precision = coco_eval.eval['precision'][ind_lo:(ind_hi + 1), :, cls_ind - 1, 0, 2]
             ap = np.mean(precision[precision > -1])
             logger.info('%-15s %5.1f' % (cls, 100 * ap))
+            info_str +=  '%-15s %5.1f\n' % (cls, 100 * ap)
 
         logger.info('~~~~ Summary metrics ~~~~')
         coco_eval.summarize()
+
+        return info_str

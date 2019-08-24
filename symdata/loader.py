@@ -146,7 +146,7 @@ class AnchorLoader(mx.io.DataIter):
         
         self.q = Queue()
         self.work_lock = td.Lock()
-        self.work_on_next()
+        # self.work_on_next()
 
         # get first batch to fill in provide_data and provide_label
         self.next_multithread()
@@ -200,7 +200,6 @@ class AnchorLoader(mx.io.DataIter):
 
     def getdata(self):
         indices = self.getindex()
-        # short_side = 1024
         # short_side = np.floor(np.random.uniform(800, 1025))
         im_tensor, im_info, gt_boxes, seg = [], [], [], []
         for index in indices:

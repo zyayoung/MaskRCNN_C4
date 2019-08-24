@@ -31,12 +31,11 @@ def compute_mask_and_label_single_py(roi, label, ins_seg, q, n):
     class_id = [0, 24, 25, 26, 27, 28, 31, 32, 33]
     # print(roi)
     target = ins_seg[int(0.5+roi[1]): int(0.5+roi[3]), int(0.5+roi[0]): int(0.5+roi[2])]
-    # print(target.shape)
     ids = np.unique(target)
     ins_id = 0
     max_count = 0
     # ids = ids[np.floor(ids / 1000) == class_id[int(label)]]
-    ids = ids[np.floor(ids / 1000) == int(label)]
+    ids = ids[(ids // 1000) == label]
     if len(ids) == 1:
         ins_id = ids[0]
         max_count = 1
@@ -98,23 +97,13 @@ def compute_mask_and_label(ex_rois, ex_labels, seg):
     mask_target = np.zeros((n_rois, 14, 14), dtype=np.float32)
     mask_label = np.zeros((n_rois), dtype=np.uint8)
     q = Queue()
-    t_list = []
     for n in range(n_rois):
-        t = td.Thread(target=compute_mask_and_label_single_py, args=(rois[n], label[n], seg, q, n))
-        t.start()
-        t_list.append(t)
-    for t in t_list:
-        t.join()
-        n, _mask, _label = q.get()
-        # t.kill()
-        del t
+        compute_mask_and_label_single_py(rois[n], label[n], seg, q, n)
+        _, _mask, _label = q.get()
         mask_target[n] = _mask
         mask_label[n] = _label
-    # for n in range(n_rois):
-    #     compute_mask_and_label_single_py(rois[n], label[n], seg, q, n)
-    #     _, _mask, _label = q.get()
-    #     mask_target[n] = _mask
-    #     mask_label[n] = _label
+
+    cv2.imwrite('tmp/{}_{}.png'.format(_label, np.random.randint(100000)), np.uint8(_mask*255))
     return mask_target, mask_label
 
 
@@ -203,7 +192,7 @@ class ProposalTargetOperator(mx.operator.CustomOp):
 
         all_rois = in_data[0].asnumpy()
         all_gt_boxes = in_data[1].asnumpy()
-        all_segs = in_data[2].asnumpy()
+        all_segs = np.uint32(in_data[2].asnumpy()+0.5)
         all_im_info = in_data[3].asnumpy()
         # print(all_segs.shape)
 
